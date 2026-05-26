@@ -23,9 +23,17 @@ void VajraTank_Apply(int tank)
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 0, 0, 0, 255);
 
-    // 添加SDKHook反弹伤害
+    // 添加SDKHook反弹伤害（在Tank上hook）
     SDKHook(tank, SDKHook_OnTakeDamage, Hook_VajraOnTakeDamage);
-    SDKHook(tank, SDKHook_OnTakeDamagePost, Hook_VajraOnTakeDamagePost);
+
+    // 为所有幸存者添加伤害修改hook
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientInGame(i) && GetClientTeam(i) == 2)
+        {
+            SDKHook(i, SDKHook_OnTakeDamage, Hook_SurvivorOnTakeDamage);
+        }
+    }
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -86,6 +94,7 @@ void VajraTank_RemoveShield()
     g_iVajraShieldRef = INVALID_ENT_REFERENCE;
 }
 
+// 金刚Tank受到伤害时的反弹处理
 public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
     // 检查是否是金刚Tank
@@ -118,11 +127,12 @@ public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, 
     return Plugin_Continue;
 }
 
-public Action Hook_VajraOnTakeDamagePost(int victim, int attacker, int inflictor, float &damage, int &damagetype, int &weapon)
+// 幸存者受到伤害时的伤害修改（金刚Tank的攻击）
+public Action Hook_SurvivorOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-    // 检查是否是金刚Tank
+    // 检查攻击者是否是金刚Tank
     int currentTank = EntRefToEntIndex(g_iVajraTankEntRef);
-    if (victim != currentTank)
+    if (attacker != currentTank)
         return Plugin_Continue;
 
     // 应用固定伤害值 (使用全局配置)
@@ -130,7 +140,8 @@ public Action Hook_VajraOnTakeDamagePost(int victim, int attacker, int inflictor
     if (damageValue != null)
     {
         damage = damageValue.FloatValue;
+        return Plugin_Changed;
     }
 
-    return Plugin_Changed;
+    return Plugin_Continue;
 }
