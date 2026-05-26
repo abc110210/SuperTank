@@ -37,7 +37,6 @@ public void OnPluginStart()
 
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开金刚Tank菜单");
 
-    HookEvent("player_spawn", Event_PlayerSpawn);
     HookEvent("player_death", Event_PlayerDeath);
     HookEvent("round_end", Event_RoundEnd);
     HookEvent("tank_spawn", Event_TankSpawn);
@@ -89,37 +88,6 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     CreateTimer(0.1, Timer_SetVajraTank, EntIndexToEntRef(tank), TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
-{
-    if (!g_cvarEnabled.BoolValue)
-        return;
-
-    int client = GetClientOfUserId(event.GetInt("userid"));
-
-    if (client <= 0 || !IsClientInGame(client) || !IsPlayerAlive(client))
-        return;
-
-    // 检查是否是Tank
-    if (GetClientTeam(client) != 3)
-        return;
-
-    int zClass = GetEntProp(client, Prop_Send, "m_zombieClass");
-    if (zClass != 8)
-        return;
-
-    // 检查是否已经是金刚Tank
-    int currentTank = EntRefToEntIndex(g_iSuperTankEntRef);
-    if (currentTank == client)
-        return;
-
-    // 根据配置的概率替换成金刚Tank
-    int spawnOdds = g_cvarSpawnOdds.IntValue;
-    if (GetRandomInt(1, 100) > spawnOdds)
-        return;
-
-    // 延迟设置属性
-    CreateTimer(0.1, Timer_SetVajraTank, EntIndexToEntRef(client), TIMER_FLAG_NO_MAPCHANGE);
-}
 
 public Action Timer_SetVajraTank(Handle timer, int tankRef)
 {
@@ -165,7 +133,7 @@ public Action Timer_SetVajraTank(Handle timer, int tankRef)
     SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
     SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
-    PrintToChatAll("\x03[金刚Tank] \x01金刚 \x04Tank \x01已生成！(皮肤:%d→1, 血量:%d)", currentSkin, finalHP);
+    PrintToChatAll("\x03[金刚Tank] \x01金刚 \x04Tank \x01已生成！血量:%d", finalHP);
 
     // 立即添加防护罩特效
     Timer_AddShieldEffect(null, tankRef);
