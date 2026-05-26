@@ -21,12 +21,11 @@ ConVar g_cvarEnabled;
 ConVar g_cvarSpawnOdds;
 ConVar g_cvarReflectChance;
 ConVar g_cvarTankHP;
-ConVar g_cvarTankDamage;
 
 bool g_bTankSpawning = false;
 float g_fLastTankSpawnTime = 0.0;
 
-// 记录特殊Tank的实体索引
+// 记录特殊Tank的实体引用
 int g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
 
 public void OnPluginStart()
@@ -35,7 +34,6 @@ public void OnPluginStart()
     g_cvarSpawnOdds = CreateConVar("shan_Vajra_odds", "50", "Ghost Tank变成金刚Tank的概率 1~100", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
     g_cvarReflectChance = CreateConVar("shan_Vajra_Tank", "40", "反弹子弹概率 1~100", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
     g_cvarTankHP = CreateConVar("shan_tank_hp", "4000", "每名玩家给Tank增加的血量", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 10000.0);
-    g_cvarTankDamage = CreateConVar("shan_tank_damage", "24", "Tank拳头基础伤害", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 1000.0);
 
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开金刚Tank菜单");
 
@@ -50,6 +48,11 @@ public void OnMapStart()
     g_bTankSpawning = false;
     g_fLastTankSpawnTime = 0.0;
     g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
+}
+
+public void OnConfigsExecuted()
+{
+    PrintToServer("[寄寄の家 - SuperTank] 该插件已重载成功");
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -136,10 +139,10 @@ public Action Timer_SetVajraTank(Handle timer, int tankRef)
     g_iSuperTankEntRef = tankRef;
 
     // 设置黑色皮肤
+    int currentSkin = GetEntProp(tank, Prop_Send, "m_skin");
     SetEntProp(tank, Prop_Send, "m_skin", 1);
 
-    // 移除旧的Hook并添加新的
-    SDKUnhook(tank, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
+    // 添加SDKHook反弹伤害
     SDKHook(tank, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
 
     // 计算在线玩家数量
@@ -163,10 +166,10 @@ public Action Timer_SetVajraTank(Handle timer, int tankRef)
     SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
     SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
-    PrintToChatAll("\x03[金刚Tank] \x01金刚 \x04Tank \x01已生成！");
+    PrintToChatAll("\x03[金刚Tank] \x01金刚 \x04Tank \x01已生成！(皮肤:%d→1, 血量:%d)", currentSkin, finalHP);
 
-    // 添加防护罩特效
-    CreateTimer(0.5, Timer_AddShieldEffect, tankRef, TIMER_FLAG_NO_MAPCHANGE);
+    // 立即添加防护罩特效
+    Timer_AddShieldEffect(null, tankRef);
 
     return Plugin_Stop;
 }
@@ -210,8 +213,14 @@ public Action Timer_AddShieldEffect(Handle timer, int tankRef)
         DispatchSpawn(particle);
         AcceptEntityInput(particle, "Start");
 
+        PrintToChatAll("\x03[金刚Tank] \x01防护罩特效已添加 (实体:%d)", particle);
+
         // 30秒后移除特效
         CreateTimer(30.0, Timer_RemoveParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
+    }
+    else
+    {
+        PrintToChatAll("\x03[金刚Tank] \x01防护罩特效创建失败");
     }
 
     return Plugin_Stop;
@@ -244,19 +253,28 @@ public Action Hook_OnTakeDamage(int victim, int &attacker, int &inflictor, float
 
     // 根据配置的概率反弹
     int reflectChance = g_cvarReflectChance.IntValue;
-    if (GetRandomInt(1, 100) > reflectChance)
-        return Plugin_Continue;
 
-    // 反弹伤害给攻击者
-    SDKHooks_TakeDamage(attacker, victim, victim, damage, damagetype);
-
-    // 显示反弹效果
     char attackerName[MAX_NAME_LENGTH];
     GetClientName(attacker, attackerName, sizeof(attackerName));
-    PrintToChatAll("\x03[金刚Tank] \x01攻击被反弹！ \x04%s \x01受到了 \x04%.0f \x01点伤害", attackerName, damage);
 
-    // 阻止原伤害
-    return Plugin_Handled;
+    // 测试：总是反弹（用于调试）
+    PrintToChatAll("\x03[金刚Tank] \x01DEBUG: 反弹检查 概率:%d 随机:%d", reflectChance, GetRandomInt(1, 100));
+
+    if (GetRandomInt(1, 100) <= reflectChance)
+    {
+        // 反弹伤害给攻击者
+        SDKHooks_TakeDamage(attacker, victim, victim, damage, damagetype);
+
+        // 显示反弹效果
+        PrintToChatAll("\x03[金刚Tank] \x01攻击被反弹！ \x04%s \x01受到了 \x04%.0f \x01点伤害", attackerName, damage);
+
+        // 阻止原伤害
+        return Plugin_Handled;
+    }
+
+    PrintToChatAll("\x03[金刚Tank] \x01DEBUG: 反弹未触发，继续正常伤害");
+
+    return Plugin_Continue;
 }
 
 int GetDifficultyTankHP()
@@ -351,9 +369,4 @@ void SpawnVajraTank(int client)
 
     // 延迟设置属性
     CreateTimer(0.1, Timer_SetVajraTank, EntIndexToEntRef(tank), TIMER_FLAG_NO_MAPCHANGE);
-}
-
-public void OnConfigsExecuted()
-{
-    PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
 }
