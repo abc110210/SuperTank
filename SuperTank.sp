@@ -20,6 +20,11 @@ public Plugin myinfo =
     url = ""
 };
 
+// 函数原型声明
+public Action Command_TestRock(int client, int args);
+public Action Timer_TriggerExplosion(Handle timer, DataPack pack);
+void TestExplosionEffect(float pos[3]);
+
 // 全局变量
 int g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
 int g_iVajraShieldRef = INVALID_ENT_REFERENCE;
@@ -67,6 +72,84 @@ public void OnConfigsExecuted()
 }
 
 // ==================== 菜单系统 ====================
+
+public Action Command_TestRock(int client, int args)
+{
+    if (client == 0)
+    {
+        ReplyToCommand(client, "[寄寄之家 - SuperTank] 此命令只能由玩家使用");
+        return Plugin_Handled;
+    }
+
+    if (!IsClientInGame(client) || !IsPlayerAlive(client))
+        return Plugin_Handled;
+
+    // 获取玩家位置
+    float pos[3], ang[3];
+    GetClientAbsOrigin(client, pos);
+    GetClientAbsAngles(client, ang);
+
+    // 在玩家前方创建石头
+    float forward[3];
+    GetAngleVectors(ang, forward, NULL_VECTOR, NULL_VECTOR);
+    pos[0] += forward[0] * 200.0;
+    pos[1] += forward[1] * 200.0;
+    pos[2] += forward[2] * 200.0;
+
+    ReplyToCommand(client, "[寄寄之家 - SuperTank] 2秒后将在你前方生成爆炸测试...");
+
+    // 2秒后触发爆炸效果
+    DataPack pack = new DataPack();
+    pack.WriteFloat(pos[0]);
+    pack.WriteFloat(pos[1]);
+    pack.WriteFloat(pos[2]);
+    CreateTimer(2.0, Timer_TriggerExplosion, pack, TIMER_FLAG_NO_MAPCHANGE);
+
+    return Plugin_Handled;
+}
+
+public Action Timer_TriggerExplosion(Handle timer, DataPack pack)
+{
+    pack.Reset();
+    float pos[3];
+    pos[0] = pack.ReadFloat();
+    pos[1] = pack.ReadFloat();
+    pos[2] = pack.ReadFloat();
+    delete pack;
+
+    // 直接调用爆炸函数
+    TestExplosionEffect(pos);
+    return Plugin_Stop;
+}
+
+// 测试爆炸效果函数
+void TestExplosionEffect(float pos[3])
+{
+    PrintToChatAll("[爆炸Tank] 测试爆炸触发! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
+
+    // 创建第一次爆炸
+    CreateExplosionEffect(pos, 1.5);
+
+    // 存储位置用于第二次爆炸
+    g_fExplosionPos[0] = pos[0];
+    g_fExplosionPos[1] = pos[1];
+    g_fExplosionPos[2] = pos[2];
+
+    // 延迟创建第二次爆炸
+    CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Command_SuperTank(int client, int args)
+
+public Action Timer_RemoveRock(Handle timer, int rockRef)
+{
+    int rock = EntRefToEntIndex(rockRef);
+    if (rock > 0 && IsValidEntity(rock))
+    {
+        AcceptEntityInput(rock, "Kill");
+    }
+    return Plugin_Stop;
+}
 
 public Action Command_SuperTank(int client, int args)
 {
