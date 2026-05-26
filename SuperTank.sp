@@ -20,9 +20,6 @@ public Plugin myinfo =
     url = ""
 };
 
-// 函数原型声明
-forward Action Command_TestRock(int client, int args);
-
 // 全局变量
 int g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
 int g_iVajraShieldRef = INVALID_ENT_REFERENCE;
@@ -34,42 +31,7 @@ ConVar g_cvarVajraEnabled;
 #include "VajraTank.sp"
 #include "ExplodeTank.sp"
 
-public void OnPluginStart()
-{
-    // 金刚Tank配置
-    g_cvarVajraEnabled = CreateConVar("shan_vajra_enabled", "1", "启用金刚Tank (0=禁用, 1=启用)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 1.0);
-    CreateConVar("shan_Vajra_reflect_damage", "10", "金刚Tank反弹伤害基数 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
-
-    // 爆炸Tank配置
-    CreateConVar("shan_ExplodeTank_explosion_damage", "50", "爆炸Tank爆炸伤害 (0-500)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 500.0);
-    CreateConVar("shan_ExplodeTank_explosion_random", "100", "爆炸Tank爆炸概率 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
-
-    // 注册命令
-    RegConsoleCmd("sm_supertank", Command_SuperTank, "打开SuperTank菜单");
-    RegAdminCmd("sm_testrock", Command_TestRock, ADMFLAG_CHEATS, "测试Tank石头爆炸");
-
-    // Hook事件
-    HookEvent("player_death", Event_PlayerDeath);
-    HookEvent("round_end", Event_RoundEnd);
-    HookEvent("tank_spawn", Event_TankSpawn);
-
-    // 尝试多个可能的配置文件路径
-    ServerCommand("exec sourcemod/SuperTank");
-    ServerCommand("exec SuperTank");
-}
-
-public void OnMapStart()
-{
-    // 预缓存防护罩模型
-    PrecacheModel("models/props_unique/airport/atlas_break_ball.mdl", true);
-}
-
-public void OnConfigsExecuted()
-{
-    PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
-}
-
-// ==================== 菜单系统 ====================
+// ==================== 测试命令 ====================
 
 public Action Command_TestRock(int client, int args)
 {
@@ -137,17 +99,44 @@ void TestExplosionEffect(float pos[3])
     CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action Command_SuperTank(int client, int args)
+// ==================== 主要功能 ====================
 
-public Action Timer_RemoveRock(Handle timer, int rockRef)
+public void OnPluginStart()
 {
-    int rock = EntRefToEntIndex(rockRef);
-    if (rock > 0 && IsValidEntity(rock))
-    {
-        AcceptEntityInput(rock, "Kill");
-    }
-    return Plugin_Stop;
+    // 金刚Tank配置
+    g_cvarVajraEnabled = CreateConVar("shan_vajra_enabled", "1", "启用金刚Tank (0=禁用, 1=启用)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 1.0);
+    CreateConVar("shan_Vajra_reflect_damage", "10", "金刚Tank反弹伤害基数 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
+
+    // 爆炸Tank配置
+    CreateConVar("shan_ExplodeTank_explosion_damage", "50", "爆炸Tank爆炸伤害 (0-500)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 500.0);
+    CreateConVar("shan_ExplodeTank_explosion_random", "100", "爆炸Tank爆炸概率 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
+
+    // 注册命令
+    RegConsoleCmd("sm_supertank", Command_SuperTank, "打开SuperTank菜单");
+    RegAdminCmd("sm_testrock", Command_TestRock, ADMFLAG_CHEATS, "测试Tank石头爆炸");
+
+    // Hook事件
+    HookEvent("player_death", Event_PlayerDeath);
+    HookEvent("round_end", Event_RoundEnd);
+    HookEvent("tank_spawn", Event_TankSpawn);
+
+    // 尝试多个可能的配置文件路径
+    ServerCommand("exec sourcemod/SuperTank");
+    ServerCommand("exec SuperTank");
 }
+
+public void OnMapStart()
+{
+    // 预缓存防护罩模型
+    PrecacheModel("models/props_unique/airport/atlas_break_ball.mdl", true);
+}
+
+public void OnConfigsExecuted()
+{
+    PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
+}
+
+// ==================== 菜单系统 ====================
 
 public Action Command_SuperTank(int client, int args)
 {
