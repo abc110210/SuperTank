@@ -1,7 +1,6 @@
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
-#include <left4dhooks>
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -12,7 +11,7 @@ public Plugin myinfo =
 {
     name = "Super Tank",
     author = "Shan",
-    description = "多种超级Tank",
+    description = "金刚Tank：黑色皮肤+防护罩+反弹伤害",
     version = "1.0.0",
     url = ""
 };
@@ -26,8 +25,8 @@ ConVar g_cvarTankDamage;
 bool g_bTankSpawning = false;
 float g_fLastTankSpawnTime = 0.0;
 
-// 记录特殊Tank的实体
-int g_iSuperTankEntity = 0;
+// 记录特殊Tank的实体索引
+int g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
 
 public void OnPluginStart()
 {
@@ -40,21 +39,50 @@ public void OnPluginStart()
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开金刚Tank菜单");
 
     HookEvent("player_spawn", Event_PlayerSpawn);
+    HookEvent("player_death", Event_PlayerDeath);
     HookEvent("round_end", Event_RoundEnd);
+    HookEvent("tank_spawn", Event_TankSpawn);
 }
 
 public void OnMapStart()
 {
     g_bTankSpawning = false;
     g_fLastTankSpawnTime = 0.0;
-    g_iSuperTankEntity = 0;
+    g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
     g_bTankSpawning = false;
     g_fLastTankSpawnTime = 0.0;
-    g_iSuperTankEntity = 0;
+    g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
+}
+
+public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+    if (!g_cvarEnabled.BoolValue)
+        return;
+
+    float currentTime = GetGameTime();
+
+    // 30秒内只处理一次
+    if (currentTime - g_fLastTankSpawnTime < 30.0)
+        return;
+
+    g_fLastTankSpawnTime = currentTime;
+
+    int tank = GetClientOfUserId(event.GetInt("userid"));
+
+    if (tank <= 0 || !IsClientInGame(tank))
+        return;
+
+    // 根据配置的概率替换成金刚Tank
+    int spawnOdds = g_cvarSpawnOdds.IntValue;
+    if (GetRandomInt(1, 100) > spawnOdds)
+        return;
+
+    // 延迟设置属性
+    CreateTimer(0.1, Timer_SetVajraTank, EntIndexToEntRef(tank), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -76,7 +104,8 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
         return;
 
     // 检查是否已经是金刚Tank
-    if (client == g_iSuperTankEntity)
+    int currentTank = EntRefToEntIndex(g_iSuperTankEntRef);
+    if (currentTank == client)
         return;
 
     // 根据配置的概率替换成金刚Tank
@@ -84,20 +113,39 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
     if (GetRandomInt(1, 100) > spawnOdds)
         return;
 
+    // 延迟设置属性
+    CreateTimer(0.1, Timer_SetVajraTank, EntIndexToEntRef(client), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_SetVajraTank(Handle timer, int tankRef)
+{
+    int tank = EntRefToEntIndex(tankRef);
+    if (tank <= 0 || !IsValidEntity(tank))
+        return Plugin_Stop;
+
+    if (!IsClientInGame(tank))
+        return Plugin_Stop;
+
+    // 再次检查是否是Tank
+    int zClass = GetEntProp(tank, Prop_Send, "m_zombieClass");
+    if (zClass != 8)
+        return Plugin_Stop;
+
     // 标记为特殊Tank
-    g_iSuperTankEntity = client;
+    g_iSuperTankEntRef = tankRef;
 
     // 设置黑色皮肤
-    SetEntProp(client, Prop_Send, "m_skin", 1);
+    SetEntProp(tank, Prop_Send, "m_skin", 1);
 
-    // 添加SDKHook反弹伤害
-    SDKHook(client, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
+    // 移除旧的Hook并添加新的
+    SDKUnhook(tank, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
+    SDKHook(tank, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
 
     // 计算在线玩家数量
     int playerCount = 0;
     for (int i = 1; i <= MaxClients; i++)
     {
-        if (IsClientInGame(i) && !IsFakeClient(i))
+        if (IsClientInGame(i) && !IsFakeClient(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
         {
             playerCount++;
         }
@@ -111,13 +159,30 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
     int finalHP = baseHP + (hpPerPlayer * playerCount);
 
     // 设置Tank血量
-    SetEntProp(client, Prop_Send, "m_iHealth", finalHP);
-    SetEntProp(client, Prop_Send, "m_iMaxHealth", finalHP);
+    SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
+    SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
     PrintToChatAll("\x03[金刚Tank] \x01金刚 \x04Tank \x01已生成！");
 
     // 添加防护罩特效
-    CreateTimer(0.5, Timer_AddShieldEffect, EntIndexToEntRef(client), TIMER_FLAG_NO_MAPCHANGE);
+    CreateTimer(0.5, Timer_AddShieldEffect, tankRef, TIMER_FLAG_NO_MAPCHANGE);
+
+    return Plugin_Stop;
+}
+
+public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+{
+    int client = GetClientOfUserId(event.GetInt("userid"));
+
+    if (client <= 0 || client > MaxClients || !IsClientInGame(client))
+        return;
+
+    // 检查死亡的是否是金刚Tank
+    int currentTank = EntRefToEntIndex(g_iSuperTankEntRef);
+    if (currentTank == client)
+    {
+        g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
+    }
 }
 
 public Action Timer_AddShieldEffect(Handle timer, int tankRef)
@@ -164,7 +229,8 @@ public Action Timer_RemoveParticle(Handle timer, int particleRef)
 public Action Hook_OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
     // 检查是否是特殊Tank
-    if (victim != g_iSuperTankEntity)
+    int currentTank = EntRefToEntIndex(g_iSuperTankEntRef);
+    if (victim != currentTank)
         return Plugin_Continue;
 
     // 检查攻击者是否是有效玩家
@@ -211,11 +277,6 @@ int GetDifficultyTankHP()
     }
 
     return 4000; // 默认普通难度
-}
-
-public void OnConfigsExecuted()
-{
-    PrintToServer("[寄寄の家 - SuperTank] 该插件已重载成功");
 }
 
 public Action Command_SuperTank(int client, int args)
@@ -284,39 +345,14 @@ void SpawnVajraTank(int client)
         return;
     }
 
-    // 标记为特殊Tank
-    g_iSuperTankEntity = tank;
-
-    // 设置黑色皮肤
-    SetEntProp(tank, Prop_Send, "m_skin", 1);
-
-    // 添加SDKHook反弹伤害
-    SDKHook(tank, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
-
-    // 计算在线玩家数量
-    int playerCount = 0;
-    for (int i = 1; i <= MaxClients; i++)
-    {
-        if (IsClientInGame(i) && !IsFakeClient(i))
-        {
-            playerCount++;
-        }
-    }
-
-    // 获取难度默认血量
-    int baseHP = GetDifficultyTankHP();
-
-    // 计算最终血量：难度默认 + (配置值 × 玩家数量)
-    int hpPerPlayer = g_cvarTankHP.IntValue;
-    int finalHP = baseHP + (hpPerPlayer * playerCount);
-
-    // 设置Tank血量
-    SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
-    SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
-
     ReplyToCommand(client, "\x03[金刚Tank] \x01已生成金刚Tank！");
     PrintToChatAll("\x03[金刚Tank] \x01玩家 \x04%N \x01生成了金刚Tank！", client);
 
-    // 添加防护罩特效
-    CreateTimer(0.5, Timer_AddShieldEffect, EntIndexToEntRef(tank), TIMER_FLAG_NO_MAPCHANGE);
+    // 延迟设置属性
+    CreateTimer(0.1, Timer_SetVajraTank, EntIndexToEntRef(tank), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public void OnConfigsExecuted()
+{
+    PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
 }
