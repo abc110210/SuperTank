@@ -51,7 +51,7 @@ public void OnMapStart()
 
 public void OnConfigsExecuted()
 {
-    PrintToServer("[寄寄之家 - SuperTank] SuperTank系统已加载");
+    PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
 }
 
 // ==================== 菜单系统 ====================
@@ -138,10 +138,6 @@ void SpawnNormalTank(int client)
     GetClientAbsAngles(client, ang);
 
     int tank = L4D2_SpawnTank(pos, ang);
-    if (tank > 0)
-    {
-        PrintToChat(client, "\x04[寄寄之家 - SuperTank] \x01已生成普通Tank");
-    }
 }
 
 // ==================== Tank生成事件 ====================

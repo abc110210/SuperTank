@@ -45,7 +45,7 @@ void VajraTank_Apply(int tank)
     SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
     SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
-    PrintToChatAll("\x04[寄寄之家 - SuperTank] \x05金刚Tank\x01已出现!");
+    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x04金刚Tank \x01已出现!");
 
     // 添加防护罩
     VajraTank_CreateShield(tank);
@@ -112,14 +112,19 @@ public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, 
 
     // 反弹概率检查 (使用全局配置)
     ConVar reflectChance = FindConVar("shan_Vajra_reflect");
-    int reflectValue = (reflectChance != null) ? reflectChance.IntValue : 40;
+    int reflectValue = (reflectChance != null) ? reflectChance.IntValue : 10;
     if (GetRandomInt(1, 100) <= reflectValue)
     {
+        // 计算反弹伤害 (配置值 ~ 配置值×2)
+        ConVar reflectDamageCvar = FindConVar("shan_Vajra_reflect_damage");
+        int baseDamage = (reflectDamageCvar != null) ? reflectDamageCvar.IntValue : 10;
+        float randomDamage = GetRandomInt(baseDamage, baseDamage * 2);
+
         // 反弹伤害
-        SDKHooks_TakeDamage(attacker, victim, victim, damage, damagetype);
+        SDKHooks_TakeDamage(attacker, victim, victim, randomDamage, damagetype);
 
         // 私聊提示
-        PrintToChat(attacker, "\x04[寄寄之家 - SuperTank] \x01你的攻击被\x04反弹\x01你受到了\x04%.0f\x01点伤害", damage);
+        PrintToChat(attacker, "\x03[寄寄之家 - SuperTank] \x01你的攻击被 \x04反弹 \x01你受到了 \x04%.0f \x01点伤害", randomDamage);
 
         return Plugin_Handled;
     }
