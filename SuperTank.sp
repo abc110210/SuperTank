@@ -42,6 +42,9 @@ public void OnPluginStart()
     HookEvent("player_death", Event_PlayerDeath);
     HookEvent("round_end", Event_RoundEnd);
     HookEvent("tank_spawn", Event_TankSpawn);
+
+    // 立即执行配置文件
+    ServerCommand("exec SuperTank");
 }
 
 public void OnMapStart()
@@ -52,11 +55,8 @@ public void OnMapStart()
 
 public void OnConfigsExecuted()
 {
-    // 执行 SuperTank.cfg 配置文件
-    ServerCommand("exec SuperTank");
-
     // 延迟检查配置值
-    CreateTimer(1.0, Timer_CheckConfig, _, TIMER_FLAG_NO_MAPCHANGE);
+    CreateTimer(0.5, Timer_CheckConfig, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_CheckConfig(Handle timer)
