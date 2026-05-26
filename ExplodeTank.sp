@@ -25,7 +25,7 @@ void ExplodeTank_Apply(int tank)
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
     // Hook Tank的攻击事件
-    SDKHook(tank, SDKHook_OnTakeDamage, Hook_ExplodeTankOnTakeDamage);
+    SDKHook(tank, SDKHook_OnTakeDamage, Hook_ExplodeTank_Damage);
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -41,7 +41,7 @@ void ExplodeTank_Apply(int tank)
 }
 
 // Tank受到伤害时的处理（检测石头投掷）
-public Action Hook_ExplodeTankOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
+public Action Hook_ExplodeTank_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
 {
     // 检查受害者是否是爆炸Tank
     int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
@@ -95,7 +95,7 @@ public Action Timer_CheckForRocks(Handle timer)
                     rockCount++;
 
                     // Hook这个石头的销毁事件
-                    SDKHook(i, SDKHook_OnTakeDamage, Hook_RockOnTakeDamage);
+                    SDKHook(i, SDKHook_OnTakeDamage, Hook_ExplodeRock_Damage);
                 }
             }
         }
@@ -106,7 +106,7 @@ public Action Timer_CheckForRocks(Handle timer)
 }
 
 // 石头被伤害时检查是否销毁
-public Action Hook_RockOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
+public Action Hook_ExplodeRock_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
 {
     // 检查是否是石头
     char modelName[128];
