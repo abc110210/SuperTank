@@ -24,15 +24,8 @@ void ExplodeTank_Apply(int tank)
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
-    // Hook实体输出事件（只Hook一次）
-    static bool hooked = false;
-    if (!hooked)
-    {
-        HookEntityOutput("prop_physics", "OnBreak", Hook_AnyPropBreak);
-        HookEntityOutput("prop_physics", "OnHealthChanged", Hook_AnyPropBreak);
-        PrintToServer("[爆炸TankDEBUG] 已Hook prop_physics事件");
-        hooked = true;
-    }
+    // Hook Tank的攻击事件
+    SDKHook(tank, SDKHook_OnTakeDamagePost, Hook_ExplodeTankAttack);
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -47,32 +40,86 @@ void ExplodeTank_Apply(int tank)
     PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x02爆炸Tank \x01已出现!");
 }
 
-// 监听所有prop_physics破碎事件
-void Hook_AnyPropBreak(const char[] output, int caller, int activator, float delay)
+// Tank攻击后的处理（检测石头投掷）
+public Action Hook_ExplodeTankAttack(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
 {
-    PrintToServer("[爆炸TankDEBUG] prop_physics事件触发: output=%s, caller=%d", output, caller);
+    // 检查攻击者是否是爆炸Tank
+    int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
+    if (attacker != currentTank)
+        return Plugin_Continue;
 
-    if (caller <= 0 || !IsValidEntity(caller))
-        return;
-
-    // 获取实体类名
-    char className[64];
-    GetEntityClassname(caller, className, sizeof(className));
-    PrintToServer("[爆炸TankDEBUG] 实体类名: %s", className);
-
-    // 获取模型名称
-    char modelName[128];
-    GetEntPropString(caller, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
-    PrintToServer("[爆炸TankDEBUG] 模型名称: %s", modelName);
-
-    // 检查是否是石头（模型名包含rock）
-    if (StrContains(modelName, "rock", false) == -1)
+    // 检查是否是近战攻击（投掷石头）
+    if (damagetype & DMG_SLASH)
     {
-        PrintToServer("[爆炸TankDEBUG] 不是石头实体");
-        return;
+        PrintToServer("[爆炸TankDEBUG] Tank投掷攻击检测到");
+
+        // 延迟检查是否有石头实体被创建
+        CreateTimer(0.1, Timer_CheckForRocks, _, TIMER_FLAG_NO_MAPCHANGE);
     }
 
-    PrintToChatAll("[爆炸Tank] 检测到Tank石头破碎!");
+    return Plugin_Continue;
+}
+
+// 检查周围的石头实体
+public Action Timer_CheckForRocks(Handle timer)
+{
+    int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
+    if (currentTank <= 0)
+        return Plugin_Stop;
+
+    float tankPos[3];
+    GetClientAbsOrigin(currentTank, tankPos);
+
+    // 搜索周围的石头实体
+    int rockCount = 0;
+    for (int i = MaxClients + 1; i < GetMaxEntities(); i++)
+    {
+        if (!IsValidEntity(i))
+            continue;
+
+        char className[64];
+        GetEntityClassname(i, className, sizeof(className));
+
+        // 检查是否是石头相关实体
+        if (StrContains(className, "tank_rock", false) != -1 ||
+            StrContains(className, "prop_physics", false) != -1)
+        {
+            char modelName[128];
+            GetEntPropString(i, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+
+            if (StrContains(modelName, "rock", false) != -1)
+            {
+                float rockPos[3];
+                GetEntPropVector(i, Prop_Send, "m_vecOrigin", rockPos);
+
+                float distance = GetVectorDistance(tankPos, rockPos, false);
+                if (distance < 500.0)
+                {
+                    PrintToServer("[爆炸TankDEBUG] 发现石头实体: ent=%d, model=%s", i, modelName);
+                    rockCount++;
+
+                    // Hook这个石头的销毁事件
+                    SDKHook(i, SDKHook_OnTakeDamagePost, Hook_RockDestroyed);
+                }
+            }
+        }
+    }
+
+    PrintToServer("[爆炸TankDEBUG] 共发现 %d 个石头实体", rockCount);
+    return Plugin_Stop;
+}
+
+// 石头被销毁时触发爆炸
+public Action Hook_RockDestroyed(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
+{
+    // 检查是否是石头
+    char modelName[128];
+    GetEntPropString(victim, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+
+    if (StrContains(modelName, "rock", false) == -1)
+        return Plugin_Continue;
+
+    PrintToChatAll("[爆炸Tank] 石头被破坏! model=%s", modelName);
 
     // 爆炸概率检查
     ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
@@ -81,12 +128,12 @@ void Hook_AnyPropBreak(const char[] output, int caller, int activator, float del
     if (GetRandomInt(1, 100) > explosionChance)
     {
         PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
-        return;
+        return Plugin_Continue;
     }
 
     // 获取当前位置
     float pos[3];
-    GetEntPropVector(caller, Prop_Send, "m_vecOrigin", pos);
+    GetEntPropVector(victim, Prop_Send, "m_vecOrigin", pos);
 
     PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
 
@@ -100,6 +147,8 @@ void Hook_AnyPropBreak(const char[] output, int caller, int activator, float del
 
     // 延迟创建第二次爆炸
     CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
+
+    return Plugin_Continue;
 }
 
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)
