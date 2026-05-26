@@ -21,9 +21,7 @@ public Plugin myinfo =
 };
 
 // 函数原型声明
-public Action Command_TestRock(int client, int args);
-public Action Timer_TriggerExplosion(Handle timer, DataPack pack);
-void TestExplosionEffect(float pos[3]);
+forward Action Command_TestRock(int client, int args);
 
 // 全局变量
 int g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
