@@ -27,6 +27,8 @@ float g_fLastTankSpawnTime = 0.0;
 
 // 记录特殊Tank的实体引用
 int g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
+// 记录防护罩实体引用
+int g_iSuperTankShieldRef = INVALID_ENT_REFERENCE;
 
 public void OnPluginStart()
 {
@@ -47,6 +49,10 @@ public void OnMapStart()
     g_bTankSpawning = false;
     g_fLastTankSpawnTime = 0.0;
     g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
+    g_iSuperTankShieldRef = INVALID_ENT_REFERENCE;
+
+    // 预缓存防护罩模型
+    PrecacheModel("models/props_unique/airport/atlas_break_ball.mdl", true);
 }
 
 public void OnConfigsExecuted()
@@ -59,6 +65,7 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
     g_bTankSpawning = false;
     g_fLastTankSpawnTime = 0.0;
     g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
+    g_iSuperTankShieldRef = INVALID_ENT_REFERENCE;
 }
 
 public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -106,8 +113,9 @@ public Action Timer_SetVajraTank(Handle timer, int tankRef)
     // 标记为特殊Tank
     g_iSuperTankEntRef = tankRef;
 
-    // 设置黑色皮肤 (注意：L4D2可能不支持m_skin属性)
-    SetEntProp(tank, Prop_Send, "m_skin", 1);
+    // 设置黑色皮肤
+    SetEntityRenderMode(tank, RENDER_TRANSCOLOR);
+    SetEntityRenderColor(tank, 0, 0, 0, 255);
 
     // 添加SDKHook反弹伤害
     SDKHook(tank, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
@@ -152,7 +160,19 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     int currentTank = EntRefToEntIndex(g_iSuperTankEntRef);
     if (currentTank == client)
     {
+        // 恢复正常颜色
+        SetEntityRenderMode(client, RENDER_NORMAL);
+        SetEntityRenderColor(client, 255, 255, 255, 255);
+
         g_iSuperTankEntRef = INVALID_ENT_REFERENCE;
+
+        // 移除防护罩
+        int shield = EntRefToEntIndex(g_iSuperTankShieldRef);
+        if (shield > 0 && IsValidEntity(shield))
+        {
+            AcceptEntityInput(shield, "Kill");
+        }
+        g_iSuperTankShieldRef = INVALID_ENT_REFERENCE;
     }
 }
 
@@ -162,44 +182,47 @@ public Action Timer_AddShieldEffect(Handle timer, int tankRef)
     if (tank <= 0 || !IsValidEntity(tank))
         return Plugin_Stop;
 
-    // 创建防护罩特效粒子
-    int particle = CreateEntityByName("info_particle_system");
-    if (particle != -1)
+    // 创建防护罩模型实体
+    int shield = CreateEntityByName("prop_dynamic_override");
+    if (shield != -1)
     {
         float pos[3];
-        GetEntPropVector(tank, Prop_Send, "m_vecOrigin", pos);
+        GetClientAbsOrigin(tank, pos);
+        pos[2] -= 120.0; // 向下偏移，让防护罩围绕Tank
 
-        TeleportEntity(particle, pos, NULL_VECTOR, NULL_VECTOR);
+        // 设置防护罩模型（使用玻璃球模型）
+        SetEntityModel(shield, "models/props_unique/airport/atlas_break_ball.mdl");
 
-        DispatchKeyValue(particle, "effect_name", "electro_shock_hands");
-        DispatchKeyValue(particle, "targetname", "tank_shield");
+        TeleportEntity(shield, pos, NULL_VECTOR, NULL_VECTOR);
 
-        SetVariantString("!self");
-        AcceptEntityInput(particle, "SetParent", tank, particle, 0);
+        DispatchSpawn(shield);
 
-        DispatchSpawn(particle);
-        AcceptEntityInput(particle, "Start");
+        // 附着到Tank
+        SetVariantString("!activator");
+        AcceptEntityInput(shield, "SetParent", tank, shield, 0);
 
-        PrintToChatAll("\x03[金刚Tank] \x01防护罩特效已添加 (实体:%d)", particle);
+        // 设置半透明渲染
+        SetEntityRenderMode(shield, RENDER_TRANSTEXTURE);
+        SetEntityRenderColor(shield, 100, 200, 255, 150); // 蓝色半透明
 
-        // 30秒后移除特效
-        CreateTimer(30.0, Timer_RemoveParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
+        // 设置发光效果
+        SetEntProp(shield, Prop_Send, "m_glowColorOverride", 255);
+        SetEntProp(shield, Prop_Send, "m_nGlowRange", 200);
+        SetEntProp(shield, Prop_Send, "m_iGlowType", 3);
+
+        // 设置为不阻挡移动
+        SetEntProp(shield, Prop_Send, "m_CollisionGroup", 1);
+
+        PrintToChatAll("\x03[金刚Tank] \x01防护罩已激活");
+
+        // 永久存在直到Tank死亡
+        g_iSuperTankShieldRef = EntIndexToEntRef(shield);
     }
     else
     {
-        PrintToChatAll("\x03[金刚Tank] \x01防护罩特效创建失败");
+        PrintToChatAll("\x03[金刚Tank] \x01防护罩创建失败");
     }
 
-    return Plugin_Stop;
-}
-
-public Action Timer_RemoveParticle(Handle timer, int particleRef)
-{
-    int particle = EntRefToEntIndex(particleRef);
-    if (particle > 0 && IsValidEntity(particle))
-    {
-        AcceptEntityInput(particle, "Kill");
-    }
     return Plugin_Stop;
 }
 
@@ -220,15 +243,11 @@ public Action Hook_OnTakeDamage(int victim, int &attacker, int &inflictor, float
 
     // 根据配置的概率反弹
     int reflectChance = g_cvarReflectChance.IntValue;
-
-    char attackerName[MAX_NAME_LENGTH];
-    GetClientName(attacker, attackerName, sizeof(attackerName));
-
-    // 测试：总是反弹（用于调试）
-    PrintToChatAll("\x03[金刚Tank] \x01DEBUG: 反弹检查 概率:%d 随机:%d", reflectChance, GetRandomInt(1, 100));
-
     if (GetRandomInt(1, 100) <= reflectChance)
     {
+        char attackerName[MAX_NAME_LENGTH];
+        GetClientName(attacker, attackerName, sizeof(attackerName));
+
         // 反弹伤害给攻击者
         SDKHooks_TakeDamage(attacker, victim, victim, damage, damagetype);
 
@@ -238,8 +257,6 @@ public Action Hook_OnTakeDamage(int victim, int &attacker, int &inflictor, float
         // 阻止原伤害
         return Plugin_Handled;
     }
-
-    PrintToChatAll("\x03[金刚Tank] \x01DEBUG: 反弹未触发，继续正常伤害");
 
     return Plugin_Continue;
 }
