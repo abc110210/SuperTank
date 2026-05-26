@@ -55,7 +55,23 @@ public void OnConfigsExecuted()
     // 执行 SuperTank.cfg 配置文件
     ServerCommand("exec SuperTank");
 
-    PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
+    // 延迟检查配置值
+    CreateTimer(1.0, Timer_CheckConfig, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_CheckConfig(Handle timer)
+{
+    ConVar reflectDamageCvar = FindConVar("shan_Vajra_reflect_damage");
+    if (reflectDamageCvar != null)
+    {
+        PrintToServer("[寄寄之家 - SuperTank] 反弹伤害配置值: %d", reflectDamageCvar.IntValue);
+    }
+    else
+    {
+        PrintToServer("[寄寄之家 - SuperTank] 错误: 找不到 shan_Vajra_reflect_damage 配置!");
+    }
+
+    return Plugin_Stop;
 }
 
 // ==================== 菜单系统 ====================
