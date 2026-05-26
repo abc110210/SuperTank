@@ -41,7 +41,7 @@ void ExplodeTank_Apply(int tank)
 }
 
 // Tank受到伤害时的处理（检测石头投掷）
-public Action Hook_ExplodeTank_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
+public Action Hook_ExplodeTank_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int weapon)
 {
     // 检查受害者是否是爆炸Tank
     int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
@@ -106,7 +106,7 @@ public Action Timer_CheckForRocks(Handle timer)
 }
 
 // 石头被伤害时检查是否销毁
-public Action Hook_ExplodeRock_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
+public Action Hook_ExplodeRock_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int weapon)
 {
     // 检查是否是石头
     char modelName[128];
