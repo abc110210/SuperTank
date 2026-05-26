@@ -23,17 +23,23 @@ public Plugin myinfo =
 // 全局变量
 int g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
 int g_iVajraShieldRef = INVALID_ENT_REFERENCE;
+int g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
 
 ConVar g_cvarVajraEnabled;
 
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
+#include "ExplodeTank.sp"
 
 public void OnPluginStart()
 {
     // 金刚Tank配置
     g_cvarVajraEnabled = CreateConVar("shan_vajra_enabled", "1", "启用金刚Tank (0=禁用, 1=启用)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 1.0);
     CreateConVar("shan_Vajra_reflect_damage", "10", "金刚Tank反弹伤害基数 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
+
+    // 爆炸Tank配置
+    CreateConVar("shan_ExplodeTank_explosion_damage", "50", "爆炸Tank爆炸伤害 (0-500)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 500.0);
+    CreateConVar("shan_ExplodeTank_explosion_random", "100", "爆炸Tank爆炸概率 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
 
     // 注册命令
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开SuperTank菜单");
@@ -56,23 +62,7 @@ public void OnMapStart()
 
 public void OnConfigsExecuted()
 {
-    // 延迟检查配置值
-    CreateTimer(0.5, Timer_CheckConfig, _, TIMER_FLAG_NO_MAPCHANGE);
-}
-
-public Action Timer_CheckConfig(Handle timer)
-{
-    ConVar reflectDamageCvar = FindConVar("shan_Vajra_reflect_damage");
-    if (reflectDamageCvar != null)
-    {
-        PrintToServer("[寄寄之家 - SuperTank] 反弹伤害配置值: %d", reflectDamageCvar.IntValue);
-    }
-    else
-    {
-        PrintToServer("[寄寄之家 - SuperTank] 错误: 找不到 shan_Vajra_reflect_damage 配置!");
-    }
-
-    return Plugin_Stop;
+    PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
 }
 
 // ==================== 菜单系统 ====================
@@ -99,6 +89,7 @@ void ShowSuperTankMenu(int client)
 
     // 添加不同的Tank类型生成选项
     menu.AddItem("vajra", "生成金刚Tank");
+    menu.AddItem("explode", "生成爆炸Tank");
     menu.AddItem("normal", "生成普通Tank");
 
     menu.ExitButton = true;
@@ -115,6 +106,10 @@ public int Handler_SuperTankMenu(Menu menu, MenuAction action, int param1, int p
         if (StrEqual(info, "vajra"))
         {
             SpawnVajraTank(param1);
+        }
+        else if (StrEqual(info, "explode"))
+        {
+            SpawnExplodeTank(param1);
         }
         else if (StrEqual(info, "normal"))
         {
@@ -149,6 +144,23 @@ void SpawnVajraTank(int client)
     }
 }
 
+void SpawnExplodeTank(int client)
+{
+    if (!IsClientInGame(client) || !IsPlayerAlive(client))
+        return;
+
+    float pos[3], ang[3];
+    GetClientAbsOrigin(client, pos);
+    GetClientAbsAngles(client, ang);
+
+    int tank = L4D2_SpawnTank(pos, ang);
+    if (tank > 0)
+    {
+        // 调用模块函数
+        ExplodeTank_Apply(tank);
+    }
+}
+
 void SpawnNormalTank(int client)
 {
     if (!IsClientInGame(client) || !IsPlayerAlive(client))
@@ -169,14 +181,27 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     if (tank <= 0 || !IsClientInGame(tank))
         return;
 
-    // 根据概率决定是否生成金刚Tank
-    ConVar vajraOdds = FindConVar("shan_Vajra_odds");
-    int odds = (vajraOdds != null) ? vajraOdds.IntValue : 50;
+    // 随机选择Tank类型 (0-100)
+    int random = GetRandomInt(1, 100);
 
-    if (GetRandomInt(1, 100) <= odds)
+    // 金刚Tank概率
+    ConVar vajraOdds = FindConVar("shan_Vajra_odds");
+    int vajraOddsValue = (vajraOdds != null) ? vajraOdds.IntValue : 30;
+
+    // 爆炸Tank概率
+    ConVar explodeOdds = FindConVar("shan_ExplodeTank_odds");
+    int explodeOddsValue = (explodeOdds != null) ? explodeOdds.IntValue : 30;
+
+    // 根据概率选择Tank类型
+    if (random <= vajraOddsValue)
     {
         VajraTank_Apply(tank);
     }
+    else if (random <= vajraOddsValue + explodeOddsValue)
+    {
+        ExplodeTank_Apply(tank);
+    }
+    // 剩余概率为普通Tank
 }
 
 // ==================== 事件处理 ====================
@@ -188,8 +213,8 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
         return;
 
     // 检查是否是金刚Tank
-    int currentTank = EntRefToEntIndex(g_iVajraTankEntRef);
-    if (currentTank == client)
+    int currentVajraTank = EntRefToEntIndex(g_iVajraTankEntRef);
+    if (currentVajraTank == client)
     {
         // 恢复正常颜色
         ResetTankColor(client);
@@ -199,12 +224,24 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
         // 移除防护罩
         VajraTank_RemoveShield();
     }
+
+    // 检查是否是爆炸Tank
+    int currentExplodeTank = EntRefToEntIndex(g_iExplodeTankEntRef);
+    if (currentExplodeTank == client)
+    {
+        // 恢复正常颜色
+        ResetTankColor(client);
+
+        // 清理爆炸Tank
+        ExplodeTank_Clear();
+    }
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
     g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
     g_iVajraShieldRef = INVALID_ENT_REFERENCE;
+    g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
 }
 
 // ==================== 辅助函数 ====================
