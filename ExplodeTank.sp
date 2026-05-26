@@ -24,8 +24,13 @@ void ExplodeTank_Apply(int tank)
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
-    // Hook实体创建事件来监听石头
-    HookEntityOutput("prop_physics", "OnBreak", Hook_ExplodeTankRockBreak);
+    // Hook实体创建事件来监听石头（只Hook一次）
+    static bool hooked = false;
+    if (!hooked)
+    {
+        HookEntityOutput("tank_rock", "OnKilled", Hook_ExplodeTankRockBreak);
+        hooked = true;
+    }
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -43,20 +48,10 @@ void ExplodeTank_Apply(int tank)
 // 石头破碎时的爆炸处理
 void Hook_ExplodeTankRockBreak(const char[] output, int caller, int activator, float delay)
 {
-    // 检查是否是爆炸Tank投掷的石头
+    // 调试信息
+    PrintToChatAll("[DEBUG] 石头破碎触发: caller=%d", caller);
+
     if (caller <= 0 || !IsValidEntity(caller))
-        return;
-
-    // 检查是否是石头实体
-    char className[64];
-    GetEntityClassname(caller, className, sizeof(className));
-    if (!StrEqual(className, "prop_physics"))
-        return;
-
-    // 检查石头的模型是否是Tank石头
-    char modelName[128];
-    GetEntPropString(caller, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
-    if (StrContains(modelName, "rock", false) == -1)
         return;
 
     // 爆炸概率检查
@@ -64,11 +59,16 @@ void Hook_ExplodeTankRockBreak(const char[] output, int caller, int activator, f
     int explosionChance = (explosionRandom != null) ? explosionRandom.IntValue : 100;
 
     if (GetRandomInt(1, 100) > explosionChance)
+    {
+        PrintToChatAll("[DEBUG] 爆炸概率未通过");
         return;  // 概率未通过，不产生爆炸
+    }
 
     // 获取当前位置
     float pos[3];
     GetEntPropVector(caller, Prop_Send, "m_vecOrigin", pos);
+
+    PrintToChatAll("[DEBUG] 创建爆炸位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
 
     // 创建第一次爆炸
     CreateExplosionEffect(pos, 1.5);
@@ -85,6 +85,7 @@ void Hook_ExplodeTankRockBreak(const char[] output, int caller, int activator, f
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)
 {
     CreateExplosionEffect(g_fExplosionPos, 1.8);
+    PrintToChatAll("[DEBUG] 第二次爆炸触发");
     return Plugin_Stop;
 }
 
@@ -102,6 +103,8 @@ void CreateExplosionEffect(float pos[3], float scale)
 
         AcceptEntityInput(particle, "Start");
         CreateTimer(0.5, Timer_RemoveExplosionParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
+
+        PrintToChatAll("[DEBUG] 粒子系统创建: pos=(%.1f, %.1f, %.1f), scale=%.1f", pos[0], pos[1], pos[2], scale);
     }
 
     // 造成爆炸伤害
@@ -109,6 +112,7 @@ void CreateExplosionEffect(float pos[3], float scale)
     int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
 
     // 对范围内的玩家造成伤害
+    int hitCount = 0;
     for (int i = 1; i <= MaxClients; i++)
     {
         if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
@@ -121,9 +125,12 @@ void CreateExplosionEffect(float pos[3], float scale)
             {
                 float actualDamage = damage * (1.0 - (distance / (300.0 * scale)));
                 SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
+                hitCount++;
             }
         }
     }
+
+    PrintToChatAll("[DEBUG] 爆炸伤害: 基础伤害=%d, 命中玩家=%d", damage, hitCount);
 }
 
 public Action Timer_RemoveExplosionParticle(Handle timer, int particleRef)
