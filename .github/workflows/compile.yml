@@ -17,7 +17,7 @@ jobs:
       # 编译插件（直接用 -i 参数指定 include 目录）
       - name: Compile plugin
         run: |
-          ./addons/sourcemod/scripting/spcomp ControlTank.sp \
+          ./addons/sourcemod/scripting/spcomp SuperTank.sp \
             -i ./addons/sourcemod/scripting/include/ \
             -o SuperTank.smx
 
