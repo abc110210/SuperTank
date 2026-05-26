@@ -3,8 +3,8 @@
  * 红色皮肤 + 石头双重爆炸
  */
 
-// 爆炸Tank实体引用
-int g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
+// 爆炸Tank实体引用（在主文件中定义）
+extern int g_iExplodeTankEntRef;
 
 // 存储爆炸位置的数据
 float g_fExplosionPos[3];
