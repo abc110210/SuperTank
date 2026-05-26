@@ -114,7 +114,7 @@ public Action Timer_SetVajraTank(Handle timer, int tankRef)
     g_iSuperTankEntRef = tankRef;
 
     // 设置黑色皮肤
-    SetEntityRenderMode(tank, RENDER_TRANSCOLOR);
+    SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 0, 0, 0, 255);
 
     // 添加SDKHook反弹伤害
