@@ -41,12 +41,12 @@ void ExplodeTank_Apply(int tank)
 }
 
 // Tank攻击后的处理（检测石头投掷）
-public Action Hook_ExplodeTankAttack(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
+public void Hook_ExplodeTankAttack(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
 {
     // 检查攻击者是否是爆炸Tank
     int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
     if (attacker != currentTank)
-        return Plugin_Continue;
+        return;
 
     // 检查是否是近战攻击（投掷石头）
     if (damagetype & DMG_SLASH)
@@ -56,8 +56,6 @@ public Action Hook_ExplodeTankAttack(int victim, int attacker, int inflictor, fl
         // 延迟检查是否有石头实体被创建
         CreateTimer(0.1, Timer_CheckForRocks, _, TIMER_FLAG_NO_MAPCHANGE);
     }
-
-    return Plugin_Continue;
 }
 
 // 检查周围的石头实体
@@ -110,14 +108,14 @@ public Action Timer_CheckForRocks(Handle timer)
 }
 
 // 石头被销毁时触发爆炸
-public Action Hook_RockDestroyed(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
+public void Hook_RockDestroyed(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
 {
     // 检查是否是石头
     char modelName[128];
     GetEntPropString(victim, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
 
     if (StrContains(modelName, "rock", false) == -1)
-        return Plugin_Continue;
+        return;
 
     PrintToChatAll("[爆炸Tank] 石头被破坏! model=%s", modelName);
 
@@ -128,7 +126,7 @@ public Action Hook_RockDestroyed(int victim, int attacker, int inflictor, float 
     if (GetRandomInt(1, 100) > explosionChance)
     {
         PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
-        return Plugin_Continue;
+        return;
     }
 
     // 获取当前位置
@@ -147,8 +145,6 @@ public Action Hook_RockDestroyed(int victim, int attacker, int inflictor, float 
 
     // 延迟创建第二次爆炸
     CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
-
-    return Plugin_Continue;
 }
 
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)
