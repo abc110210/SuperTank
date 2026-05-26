@@ -25,7 +25,7 @@ void ExplodeTank_Apply(int tank)
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
     // Hook Tank的攻击事件
-    SDKHook(tank, SDKHook_OnTakeDamagePost, Hook_ExplodeTankAttack);
+    SDKHook(tank, SDKHook_OnTakeDamage, Hook_ExplodeTankOnTakeDamage);
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -40,22 +40,20 @@ void ExplodeTank_Apply(int tank)
     PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x02爆炸Tank \x01已出现!");
 }
 
-// Tank攻击后的处理（检测石头投掷）
-public void Hook_ExplodeTankAttack(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
+// Tank受到伤害时的处理（检测石头投掷）
+public Action Hook_ExplodeTankOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
 {
-    // 检查攻击者是否是爆炸Tank
+    // 检查受害者是否是爆炸Tank
     int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
-    if (attacker != currentTank)
-        return;
+    if (victim != currentTank)
+        return Plugin_Continue;
 
-    // 检查是否是近战攻击（投掷石头）
-    if (damagetype & DMG_SLASH)
-    {
-        PrintToServer("[爆炸TankDEBUG] Tank投掷攻击检测到");
+    PrintToServer("[爆炸TankDEBUG] Tank受到伤害，检查是否投掷石头");
 
-        // 延迟检查是否有石头实体被创建
-        CreateTimer(0.1, Timer_CheckForRocks, _, TIMER_FLAG_NO_MAPCHANGE);
-    }
+    // 延迟检查是否有石头实体被创建
+    CreateTimer(0.1, Timer_CheckForRocks, _, TIMER_FLAG_NO_MAPCHANGE);
+
+    return Plugin_Continue;
 }
 
 // 检查周围的石头实体
@@ -97,7 +95,7 @@ public Action Timer_CheckForRocks(Handle timer)
                     rockCount++;
 
                     // Hook这个石头的销毁事件
-                    SDKHook(i, SDKHook_OnTakeDamagePost, Hook_RockDestroyed);
+                    SDKHook(i, SDKHook_OnTakeDamage, Hook_RockOnTakeDamage);
                 }
             }
         }
@@ -107,44 +105,52 @@ public Action Timer_CheckForRocks(Handle timer)
     return Plugin_Stop;
 }
 
-// 石头被销毁时触发爆炸
-public void Hook_RockDestroyed(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon)
+// 石头被伤害时检查是否销毁
+public Action Hook_RockOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon)
 {
     // 检查是否是石头
     char modelName[128];
     GetEntPropString(victim, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
 
     if (StrContains(modelName, "rock", false) == -1)
-        return;
+        return Plugin_Continue;
 
-    PrintToChatAll("[爆炸Tank] 石头被破坏! model=%s", modelName);
-
-    // 爆炸概率检查
-    ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
-    int explosionChance = (explosionRandom != null) ? explosionRandom.IntValue : 100;
-
-    if (GetRandomInt(1, 100) > explosionChance)
+    // 检查石头是否被销毁
+    int health = GetEntProp(victim, Prop_Data, "m_iHealth");
+    if (health <= 0 || damage >= health)
     {
-        PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
-        return;
+        PrintToChatAll("[爆炸Tank] 石头被破坏! model=%s", modelName);
+
+        // 爆炸概率检查
+        ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
+        int explosionChance = (explosionRandom != null) ? explosionRandom.IntValue : 100;
+
+        if (GetRandomInt(1, 100) <= explosionChance)
+        {
+            // 获取当前位置
+            float pos[3];
+            GetEntPropVector(victim, Prop_Send, "m_vecOrigin", pos);
+
+            PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
+
+            // 创建第一次爆炸
+            CreateExplosionEffect(pos, 1.5);
+
+            // 存储位置用于第二次爆炸
+            g_fExplosionPos[0] = pos[0];
+            g_fExplosionPos[1] = pos[1];
+            g_fExplosionPos[2] = pos[2];
+
+            // 延迟创建第二次爆炸
+            CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
+        }
+        else
+        {
+            PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
+        }
     }
 
-    // 获取当前位置
-    float pos[3];
-    GetEntPropVector(victim, Prop_Send, "m_vecOrigin", pos);
-
-    PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
-
-    // 创建第一次爆炸
-    CreateExplosionEffect(pos, 1.5);
-
-    // 存储位置用于第二次爆炸
-    g_fExplosionPos[0] = pos[0];
-    g_fExplosionPos[1] = pos[1];
-    g_fExplosionPos[2] = pos[2];
-
-    // 延迟创建第二次爆炸
-    CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
+    return Plugin_Continue;
 }
 
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)

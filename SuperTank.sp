@@ -172,7 +172,7 @@ void SpawnNormalTank(int client)
     GetClientAbsOrigin(client, pos);
     GetClientAbsAngles(client, ang);
 
-    int tank = L4D2_SpawnTank(pos, ang);
+    L4D2_SpawnTank(pos, ang);
 }
 
 // ==================== Tank生成事件 ====================
