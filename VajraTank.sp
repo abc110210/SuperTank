@@ -5,10 +5,6 @@
 
 #define DMG_BULLET (1 << 1)
 
-// 金刚Tank实体引用（在主文件中声明）
-extern int g_iVajraTankEntRef;
-extern int g_iVajraShieldRef;
-
 // 金刚Tank应用函数
 void VajraTank_Apply(int tank)
 {
