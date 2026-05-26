@@ -52,6 +52,9 @@ public void OnMapStart()
 
 public void OnConfigsExecuted()
 {
+    // 执行 SuperTank.cfg 配置文件
+    ServerCommand("exec SuperTank");
+
     PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
 }
 
