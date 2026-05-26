@@ -43,7 +43,8 @@ public void OnPluginStart()
     HookEvent("round_end", Event_RoundEnd);
     HookEvent("tank_spawn", Event_TankSpawn);
 
-    // 立即执行配置文件
+    // 尝试多个可能的配置文件路径
+    ServerCommand("exec sourcemod/SuperTank");
     ServerCommand("exec SuperTank");
 }
 
