@@ -11,9 +11,6 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-// 包含各个Tank模块
-#include "VajraTank.sp"
-
 public Plugin myinfo =
 {
     name = "SuperTank System",
@@ -28,6 +25,9 @@ int g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
 int g_iVajraShieldRef = INVALID_ENT_REFERENCE;
 
 ConVar g_cvarVajraEnabled;
+
+// 包含各个Tank模块（必须在全局变量声明之后）
+#include "VajraTank.sp"
 
 public void OnPluginStart()
 {
