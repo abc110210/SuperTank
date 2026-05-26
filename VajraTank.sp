@@ -118,7 +118,14 @@ public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, 
         // 计算反弹伤害 (配置值 ~ 配置值×2)
         ConVar reflectDamageCvar = FindConVar("shan_Vajra_reflect_damage");
         int baseDamage = (reflectDamageCvar != null) ? reflectDamageCvar.IntValue : 10;
-        float randomDamage = GetRandomInt(baseDamage, baseDamage * 2);
+
+        // 调试信息
+        PrintToChat(attacker, "[DEBUG] baseDamage: %d, 配置值: %d", baseDamage, (reflectDamageCvar != null) ? reflectDamageCvar.IntValue : -1);
+
+        float randomDamage = GetRandomInt(baseDamage, baseDamage * 2) * 1.0;
+
+        // 调试信息
+        PrintToChat(attacker, "[DEBUG] randomDamage: %f", randomDamage);
 
         // 反弹伤害
         SDKHooks_TakeDamage(attacker, victim, victim, randomDamage, damagetype);
