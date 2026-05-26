@@ -33,6 +33,7 @@ public void OnPluginStart()
 {
     // 金刚Tank配置
     g_cvarVajraEnabled = CreateConVar("shan_vajra_enabled", "1", "启用金刚Tank (0=禁用, 1=启用)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 1.0);
+    CreateConVar("shan_Vajra_reflect_damage", "10", "金刚Tank反弹伤害基数 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
 
     // 注册命令
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开SuperTank菜单");
