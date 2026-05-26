@@ -138,8 +138,7 @@ public Action Timer_SetVajraTank(Handle timer, int tankRef)
     // 标记为特殊Tank
     g_iSuperTankEntRef = tankRef;
 
-    // 设置黑色皮肤
-    int currentSkin = GetEntProp(tank, Prop_Send, "m_skin");
+    // 设置黑色皮肤 (注意：L4D2可能不支持m_skin属性)
     SetEntProp(tank, Prop_Send, "m_skin", 1);
 
     // 添加SDKHook反弹伤害
