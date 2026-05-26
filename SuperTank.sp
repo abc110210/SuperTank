@@ -43,6 +43,7 @@ public void OnPluginStart()
 
     // 注册命令
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开SuperTank菜单");
+    RegAdminCmd("sm_testrock", Command_TestRock, ADMFLAG_CHEATS, "测试Tank石头爆炸");
 
     // Hook事件
     HookEvent("player_death", Event_PlayerDeath);

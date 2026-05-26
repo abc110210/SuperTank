@@ -24,11 +24,13 @@ void ExplodeTank_Apply(int tank)
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
-    // Hook实体创建事件来监听石头（只Hook一次）
+    // Hook实体输出事件（只Hook一次）
     static bool hooked = false;
     if (!hooked)
     {
-        HookEntityOutput("tank_rock", "OnKilled", Hook_ExplodeTankRockBreak);
+        HookEntityOutput("prop_physics", "OnBreak", Hook_AnyPropBreak);
+        HookEntityOutput("prop_physics", "OnHealthChanged", Hook_AnyPropBreak);
+        PrintToServer("[爆炸TankDEBUG] 已Hook prop_physics事件");
         hooked = true;
     }
 
@@ -45,14 +47,32 @@ void ExplodeTank_Apply(int tank)
     PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x02爆炸Tank \x01已出现!");
 }
 
-// 石头破碎时的爆炸处理
-void Hook_ExplodeTankRockBreak(const char[] output, int caller, int activator, float delay)
+// 监听所有prop_physics破碎事件
+void Hook_AnyPropBreak(const char[] output, int caller, int activator, float delay)
 {
-    // 调试信息
-    PrintToChatAll("[DEBUG] 石头破碎触发: caller=%d", caller);
+    PrintToServer("[爆炸TankDEBUG] prop_physics事件触发: output=%s, caller=%d", output, caller);
 
     if (caller <= 0 || !IsValidEntity(caller))
         return;
+
+    // 获取实体类名
+    char className[64];
+    GetEntityClassname(caller, className, sizeof(className));
+    PrintToServer("[爆炸TankDEBUG] 实体类名: %s", className);
+
+    // 获取模型名称
+    char modelName[128];
+    GetEntPropString(caller, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+    PrintToServer("[爆炸TankDEBUG] 模型名称: %s", modelName);
+
+    // 检查是否是石头（模型名包含rock）
+    if (StrContains(modelName, "rock", false) == -1)
+    {
+        PrintToServer("[爆炸TankDEBUG] 不是石头实体");
+        return;
+    }
+
+    PrintToChatAll("[爆炸Tank] 检测到Tank石头破碎!");
 
     // 爆炸概率检查
     ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
@@ -60,15 +80,15 @@ void Hook_ExplodeTankRockBreak(const char[] output, int caller, int activator, f
 
     if (GetRandomInt(1, 100) > explosionChance)
     {
-        PrintToChatAll("[DEBUG] 爆炸概率未通过");
-        return;  // 概率未通过，不产生爆炸
+        PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
+        return;
     }
 
     // 获取当前位置
     float pos[3];
     GetEntPropVector(caller, Prop_Send, "m_vecOrigin", pos);
 
-    PrintToChatAll("[DEBUG] 创建爆炸位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
+    PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
 
     // 创建第一次爆炸
     CreateExplosionEffect(pos, 1.5);
@@ -85,13 +105,15 @@ void Hook_ExplodeTankRockBreak(const char[] output, int caller, int activator, f
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)
 {
     CreateExplosionEffect(g_fExplosionPos, 1.8);
-    PrintToChatAll("[DEBUG] 第二次爆炸触发");
+    PrintToChatAll("[爆炸Tank] 第二次爆炸触发!");
     return Plugin_Stop;
 }
 
 // 创建爆炸效果
 void CreateExplosionEffect(float pos[3], float scale)
 {
+    PrintToServer("[爆炸TankDEBUG] 开始创建爆炸效果");
+
     // 创建爆炸粒子效果
     int particle = CreateEntityByName("info_particle_system");
     if (particle != -1)
@@ -104,7 +126,11 @@ void CreateExplosionEffect(float pos[3], float scale)
         AcceptEntityInput(particle, "Start");
         CreateTimer(0.5, Timer_RemoveExplosionParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
 
-        PrintToChatAll("[DEBUG] 粒子系统创建: pos=(%.1f, %.1f, %.1f), scale=%.1f", pos[0], pos[1], pos[2], scale);
+        PrintToServer("[爆炸TankDEBUG] 粒子系统已创建: ent=%d", particle);
+    }
+    else
+    {
+        PrintToServer("[爆炸TankDEBUG] 粒子系统创建失败!");
     }
 
     // 造成爆炸伤害
@@ -126,11 +152,12 @@ void CreateExplosionEffect(float pos[3], float scale)
                 float actualDamage = damage * (1.0 - (distance / (300.0 * scale)));
                 SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
                 hitCount++;
+                PrintToServer("[爆炸TankDEBUG] 命中玩家%d: 伤害=%.1f, 距离=%.1f", i, actualDamage, distance);
             }
         }
     }
 
-    PrintToChatAll("[DEBUG] 爆炸伤害: 基础伤害=%d, 命中玩家=%d", damage, hitCount);
+    PrintToChatAll("[爆炸Tank] 爆炸完成! 伤害=%d, 命中=%d人", damage, hitCount);
 }
 
 public Action Timer_RemoveExplosionParticle(Handle timer, int particleRef)
