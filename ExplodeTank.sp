@@ -4,8 +4,34 @@
  * 基于Mutant Tanks的实现方式
  */
 
+#define MAX_ROCKS 128
+
 // 爆炸Tank实体引用
 static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
+
+// 石头实体数组（用于跟踪爆炸Tank的石头）
+static int g_iExplodeTankRocks[MAX_ROCKS];
+static int g_iRockCount = 0;
+
+// 前向声明
+void ExplodeTank_OnEntityCreated(int entity, const char[] classname);
+
+// 清理石头跟踪列表
+void ExplodeTank_ClearRockList()
+{
+    for (int i = 0; i < g_iRockCount; i++)
+    {
+        if (g_iExplodeTankRocks[i] != INVALID_ENT_REFERENCE)
+        {
+            int rock = EntRefToEntIndex(g_iExplodeTankRocks[i]);
+            if (rock > 0 && IsValidEntity(rock))
+            {
+                SDKUnhook(rock, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+            }
+        }
+    }
+    g_iRockCount = 0;
+}
 
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
@@ -48,6 +74,91 @@ int ExplodeTank_GetCurrentTank()
     return EntRefToEntIndex(g_iThisExplodeTankEntRef);
 }
 
+// 监听实体创建（用于跟踪爆炸Tank投掷的石头）
+void ExplodeTank_OnEntityCreated(int entity, const char[] classname)
+{
+    if (StrEqual(classname, "tank_rock", false))
+    {
+        int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+        if (currentTank > 0 && IsClientInGame(currentTank))
+        {
+            // 检查是否是当前爆炸Tank投掷的
+            int thrower = GetEntPropEnt(entity, Prop_Data, "m_hThrower");
+            if (thrower == currentTank)
+            {
+                // 添加到石头跟踪列表
+                if (g_iRockCount < MAX_ROCKS)
+                {
+                    g_iExplodeTankRocks[g_iRockCount] = EntIndexToEntRef(entity);
+                    g_iRockCount++;
+                    PrintToServer("[爆炸TankDEBUG] 石头创建并添加到跟踪: entity=%d, thrower=%d", entity, thrower);
+
+                    // Hook石头被破坏事件
+                    SDKHook(entity, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+                }
+            }
+        }
+    }
+}
+
+// 石头受到伤害时（检查是否被摧毁）
+public Action Hook_RockTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+    if (damage <= 0.0)
+        return Plugin_Continue;
+
+    char classname[64];
+    GetEntityClassname(victim, classname, sizeof(classname));
+    if (!StrEqual(classname, "tank_rock", false))
+        return Plugin_Continue;
+
+    // 检查是否是爆炸Tank的石头
+    int rockRef = EntIndexToEntRef(victim);
+    bool isExplodeTankRock = false;
+    for (int i = 0; i < g_iRockCount; i++)
+    {
+        if (g_iExplodeTankRocks[i] == rockRef)
+        {
+            isExplodeTankRock = true;
+            break;
+        }
+    }
+
+    if (!isExplodeTankRock)
+        return Plugin_Continue;
+
+    PrintToServer("[爆炸TankDEBUG] 石头受到伤害: victim=%d, damage=%.1f", victim, damage);
+
+    // 获取石头当前血量
+    int rockHealth = GetEntProp(victim, Prop_Data, "m_iHealth");
+    PrintToServer("[爆炸TankDEBUG] 石头当前血量: %d", rockHealth);
+
+    // 如果这次伤害会摧毁石头
+    if (rockHealth > 0 && damage >= rockHealth)
+    {
+        PrintToServer("[爆炸TankDEBUG] 石头即将被摧毁，触发爆炸!");
+
+        // 获取石头位置
+        float rockPos[3];
+        GetEntPropVector(victim, Prop_Data, "m_vecOrigin", rockPos);
+
+        // 从跟踪列表中移除
+        for (int i = 0; i < g_iRockCount; i++)
+        {
+            if (g_iExplodeTankRocks[i] == rockRef)
+            {
+                g_iExplodeTankRocks[i] = INVALID_ENT_REFERENCE;
+                break;
+            }
+        }
+
+        // 触发爆炸
+        TriggerRockExplosion(rockPos);
+    }
+
+    return Plugin_Continue;
+}
+
 // 爆炸Tank应用函数
 void ExplodeTank_Apply(int tank)
 {
@@ -64,6 +175,9 @@ void ExplodeTank_Apply(int tank)
     VajraTank_ClearAllEffects(tank);
 
     PrintToServer("[爆炸TankDEBUG] 应用爆炸Tank: tank=%d, userid=%d, entref=%d", tank, GetClientUserId(tank), EntIndexToEntRef(tank));
+
+    // 清理旧的石头跟踪列表
+    ExplodeTank_ClearRockList();
 
     // 标记为爆炸Tank
     g_iThisExplodeTankEntRef = EntIndexToEntRef(tank);
@@ -251,6 +365,7 @@ void ExplodeTank_OnDeath(int tank)
     if (currentExplodeTank == tank)
     {
         g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
-        PrintToServer("[爆炸TankDEBUG] 爆炸Tank死亡，清理引用");
+        ExplodeTank_ClearRockList();
+        PrintToServer("[爆炸TankDEBUG] 爆炸Tank死亡，清理引用和石头列表");
     }
 }

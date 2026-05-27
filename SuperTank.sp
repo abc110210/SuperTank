@@ -79,6 +79,12 @@ public void OnMapStart()
     PrecacheModel("models/props_unique/airport/atlas_break_ball.mdl", true);
 }
 
+// 监听实体创建（用于石头跟踪）
+public void OnEntityCreated(int entity, const char[] classname)
+{
+    ExplodeTank_OnEntityCreated(entity, classname);
+}
+
 public void OnConfigsExecuted()
 {
     PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
