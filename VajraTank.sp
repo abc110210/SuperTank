@@ -1,9 +1,14 @@
 /**
  * 金刚Tank模块
  * 黑色皮肤 + 防护罩 + 伤害反弹
+ * 完全独立模块，不依赖其他模块
  */
 
 #define DMG_BULLET (1 << 1)
+
+// 金刚Tank独立的实体引用
+static int g_iThisVajraTankEntRef = INVALID_ENT_REFERENCE;
+static int g_iThisVajraShieldRef = INVALID_ENT_REFERENCE;
 
 // 金刚Tank应用函数
 void VajraTank_Apply(int tank)
@@ -16,8 +21,11 @@ void VajraTank_Apply(int tank)
     if (zClass != 8)
         return;
 
+    // 先清理旧效果（如果有）
+    VajraTank_ClearEffects(tank);
+
     // 标记为金刚Tank
-    g_iVajraTankEntRef = EntIndexToEntRef(tank);
+    g_iThisVajraTankEntRef = EntIndexToEntRef(tank);
 
     // 设置黑色皮肤
     SetEntityRenderMode(tank, RENDER_NORMAL);
@@ -39,10 +47,11 @@ void VajraTank_Apply(int tank)
     PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x05金刚Tank \x01已出现!");
 
     // 添加防护罩
-    CreateVajraShield(tank);
+    VajraTank_CreateShield(tank);
 }
 
-void CreateVajraShield(int tank)
+// 创建金刚Tank防护罩
+void VajraTank_CreateShield(int tank)
 {
     int shield = CreateEntityByName("prop_dynamic_override");
     if (shield != -1)
@@ -71,25 +80,42 @@ void CreateVajraShield(int tank)
         // 不阻挡移动
         SetEntProp(shield, Prop_Send, "m_CollisionGroup", 1);
 
-        g_iVajraShieldRef = EntIndexToEntRef(shield);
+        g_iThisVajraShieldRef = EntIndexToEntRef(shield);
     }
 }
 
+// 清理金刚Tank效果
+void VajraTank_ClearEffects(int tank)
+{
+    // 检查是否是之前的金刚Tank
+    int currentVajraTank = EntRefToEntIndex(g_iThisVajraTankEntRef);
+    if (currentVajraTank == tank)
+    {
+        // 移除防护罩
+        VajraTank_RemoveShield();
+    }
+
+    // 重置Tank颜色
+    SetEntityRenderMode(tank, RENDER_NORMAL);
+    SetEntityRenderColor(tank, 255, 255, 255, 255);
+}
+
+// 移除金刚Tank防护罩
 void VajraTank_RemoveShield()
 {
-    int shield = EntRefToEntIndex(g_iVajraShieldRef);
+    int shield = EntRefToEntIndex(g_iThisVajraShieldRef);
     if (shield > 0 && IsValidEntity(shield))
     {
         AcceptEntityInput(shield, "Kill");
     }
-    g_iVajraShieldRef = INVALID_ENT_REFERENCE;
+    g_iThisVajraShieldRef = INVALID_ENT_REFERENCE;
 }
 
 // 金刚Tank受到伤害时的反弹处理
 public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-    // 检查是否是金刚Tank
-    int currentTank = EntRefToEntIndex(g_iVajraTankEntRef);
+    // 检查是否是当前的金刚Tank
+    int currentTank = EntRefToEntIndex(g_iThisVajraTankEntRef);
     if (victim != currentTank)
         return Plugin_Continue;
 
@@ -122,4 +148,15 @@ public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, 
     }
 
     return Plugin_Continue;
+}
+
+// 金刚Tank死亡时清理
+void VajraTank_OnDeath(int tank)
+{
+    int currentVajraTank = EntRefToEntIndex(g_iThisVajraTankEntRef);
+    if (currentVajraTank == tank)
+    {
+        VajraTank_RemoveShield();
+        g_iThisVajraTankEntRef = INVALID_ENT_REFERENCE;
+    }
 }

@@ -21,11 +21,13 @@ public Plugin myinfo =
 };
 
 // 全局变量
-int g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
-int g_iVajraShieldRef = INVALID_ENT_REFERENCE;
-int g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
-
 ConVar g_cvarVajraEnabled;
+
+// Tank伤害配置
+ConVar g_cvarTankDamage;
+
+// 幸存者伤害Hook状态
+bool g_bSurvivorHooksSetup = false;
 
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
@@ -43,6 +45,9 @@ public void OnPluginStart()
     CreateConVar("shan_ExplodeTank_explosion_damage", "50", "爆炸Tank爆炸伤害 (0-500)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 500.0);
     CreateConVar("shan_ExplodeTank_explosion_random", "100", "爆炸Tank爆炸概率 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
 
+    // 全局Tank配置
+    g_cvarTankDamage = CreateConVar("shan_tank_damage", "24", "Tank拳头伤害值 (1-1000)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 1000.0);
+
     // 注册命令
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开SuperTank菜单");
 
@@ -50,6 +55,7 @@ public void OnPluginStart()
     HookEvent("player_death", Event_PlayerDeath);
     HookEvent("round_end", Event_RoundEnd);
     HookEvent("tank_spawn", Event_TankSpawn);
+    HookEvent("player_spawn", Event_PlayerSpawn);
 
     // 尝试多个可能的配置文件路径
     ServerCommand("exec sourcemod/SuperTank");
@@ -183,9 +189,6 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     if (tank <= 0 || !IsClientInGame(tank))
         return;
 
-    // 清理之前的特殊Tank效果
-    ClearAllSpecialTankEffects(tank);
-
     // 随机选择Tank类型 (0-100)
     int random = GetRandomInt(1, 100);
 
@@ -209,23 +212,40 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     // 剩余概率为普通Tank
 }
 
-// 清理所有特殊Tank效果
-void ClearAllSpecialTankEffects(int tank)
+// ==================== 玩家生成事件 ====================
+
+public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-    // 清理金刚Tank防护罩
-    int shield = EntRefToEntIndex(g_iVajraShieldRef);
-    if (shield > 0 && IsValidEntity(shield))
+    int client = GetClientOfUserId(event.GetInt("userid"));
+    if (client <= 0 || client > MaxClients || !IsClientInGame(client))
+        return;
+
+    // 只Hook幸存者
+    if (GetClientTeam(client) == 2)
     {
-        AcceptEntityInput(shield, "Kill");
-        g_iVajraShieldRef = INVALID_ENT_REFERENCE;
+        SDKHook(client, SDKHook_OnTakeDamage, Hook_TankDamageOutput);
+    }
+}
+
+// Tank输出伤害统一处理
+public Action Hook_TankDamageOutput(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+    // 检查攻击者是否是Tank
+    if (attacker <= 0 || attacker > MaxClients || !IsClientInGame(attacker))
+        return Plugin_Continue;
+
+    int zClass = GetEntProp(attacker, Prop_Send, "m_zombieClass");
+    if (zClass != 8)
+        return Plugin_Continue;
+
+    // 应用全局Tank伤害值
+    if (g_cvarTankDamage != null)
+    {
+        damage = g_cvarTankDamage.FloatValue;
+        return Plugin_Changed;
     }
 
-    // 重置Tank颜色
-    ResetTankColor(tank);
-
-    // 清理实体引用
-    g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
-    g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
+    return Plugin_Continue;
 }
 
 // ==================== 事件处理 ====================
@@ -236,36 +256,14 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     if (client <= 0 || client > MaxClients || !IsClientInGame(client))
         return;
 
-    // 检查是否是金刚Tank
-    int currentVajraTank = EntRefToEntIndex(g_iVajraTankEntRef);
-    if (currentVajraTank == client)
-    {
-        // 恢复正常颜色
-        ResetTankColor(client);
-
-        g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
-
-        // 移除防护罩
-        VajraTank_RemoveShield();
-    }
-
-    // 检查是否是爆炸Tank
-    int currentExplodeTank = EntRefToEntIndex(g_iExplodeTankEntRef);
-    if (currentExplodeTank == client)
-    {
-        // 恢复正常颜色
-        ResetTankColor(client);
-
-        // 清理爆炸Tank
-        ExplodeTank_Clear();
-    }
+    // 调用各模块的死亡处理
+    VajraTank_OnDeath(client);
+    ExplodeTank_OnDeath(client);
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
-    g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
-    g_iVajraShieldRef = INVALID_ENT_REFERENCE;
-    g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
+    // 各模块会自动清理自己的状态
 }
 
 // ==================== 辅助函数 ====================
@@ -302,10 +300,4 @@ int GetDifficultyTankHP()
     }
 
     return 4000;
-}
-
-void ResetTankColor(int tank)
-{
-    SetEntityRenderMode(tank, RENDER_NORMAL);
-    SetEntityRenderColor(tank, 255, 255, 255, 255);
 }

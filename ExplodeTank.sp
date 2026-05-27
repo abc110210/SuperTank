@@ -1,10 +1,12 @@
 /**
  * 爆炸Tank模块
  * 红色皮肤 + 石头双重爆炸
+ * 完全独立模块，不依赖其他模块
  */
 
-// 存储爆炸位置的数据
-float g_fExplosionPos[3];
+// 爆炸Tank独立的实体引用
+static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
+static float g_fExplodeExplosionPos[3];
 
 // 爆炸Tank应用函数
 void ExplodeTank_Apply(int tank)
@@ -17,17 +19,20 @@ void ExplodeTank_Apply(int tank)
     if (zClass != 8)
         return;
 
+    // 先清理旧效果（如果有）
+    ExplodeTank_ClearEffects(tank);
+
     // 标记为爆炸Tank
-    g_iExplodeTankEntRef = EntIndexToEntRef(tank);
+    g_iThisExplodeTankEntRef = EntIndexToEntRef(tank);
 
     // 设置红色皮肤
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
-    // Hook所有实体输出事件（全局监听）
-    HookEntityOutput("tank_rock", "OnKilled", Hook_TankRockKilled);
-    HookEntityOutput("tank_rock", "OnBreak", Hook_TankRockKilled);
-    HookEntityOutput("prop_physics", "OnBreak", Hook_TankRockKilled);
+    // Hook所有实体输出事件（独立Hook）
+    HookEntityOutput("tank_rock", "OnKilled", Hook_ExplodeTankRockKilled);
+    HookEntityOutput("tank_rock", "OnBreak", Hook_ExplodeTankRockKilled);
+    HookEntityOutput("prop_physics", "OnBreak", Hook_ExplodeTankRockKilled);
 
     PrintToServer("[爆炸TankDEBUG] 已Hook石头事件");
 
@@ -44,10 +49,18 @@ void ExplodeTank_Apply(int tank)
     PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x02爆炸Tank \x01已出现!");
 }
 
-// Tank石头被杀死/破坏时的处理
-void Hook_TankRockKilled(const char[] output, int caller, int activator, float delay)
+// 清理爆炸Tank效果
+void ExplodeTank_ClearEffects(int tank)
 {
-    PrintToServer("[爆炸TankDEBUG] 石头事件触发: output=%s, caller=%d, activator=%d", output, caller, activator);
+    // 重置Tank颜色
+    SetEntityRenderMode(tank, RENDER_NORMAL);
+    SetEntityRenderColor(tank, 255, 255, 255, 255);
+}
+
+// Tank石头被杀死/破坏时的处理
+void Hook_ExplodeTankRockKilled(const char[] output, int caller, int activator, float delay)
+{
+    PrintToServer("[爆炸TankDEBUG] 石头事件触发: output=%s, caller=%d", output, caller);
 
     if (caller <= 0 || !IsValidEntity(caller))
         return;
@@ -55,19 +68,14 @@ void Hook_TankRockKilled(const char[] output, int caller, int activator, float d
     // 获取实体类名
     char className[64];
     GetEntityClassname(caller, className, sizeof(className));
-    PrintToServer("[爆炸TankDEBUG] 实体类名: %s", className);
 
     // 获取模型名称
     char modelName[128];
     GetEntPropString(caller, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
-    PrintToServer("[爆炸TankDEBUG] 模型名称: %s", modelName);
 
     // 检查是否是石头模型
     if (StrContains(modelName, "rock", false) == -1 && StrContains(className, "tank_rock", false) == -1)
-    {
-        PrintToServer("[爆炸TankDEBUG] 不是石头实体");
         return;
-    }
 
     PrintToChatAll("[爆炸Tank] 检测到Tank石头破碎!");
 
@@ -88,12 +96,12 @@ void Hook_TankRockKilled(const char[] output, int caller, int activator, float d
     PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
 
     // 创建第一次爆炸
-    CreateExplosionEffect(pos, 1.5);
+    ExplodeTank_CreateExplosion(pos, 1.5);
 
     // 存储位置用于第二次爆炸
-    g_fExplosionPos[0] = pos[0];
-    g_fExplosionPos[1] = pos[1];
-    g_fExplosionPos[2] = pos[2];
+    g_fExplodeExplosionPos[0] = pos[0];
+    g_fExplodeExplosionPos[1] = pos[1];
+    g_fExplodeExplosionPos[2] = pos[2];
 
     // 延迟创建第二次爆炸
     CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -101,13 +109,13 @@ void Hook_TankRockKilled(const char[] output, int caller, int activator, float d
 
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)
 {
-    CreateExplosionEffect(g_fExplosionPos, 1.8);
+    ExplodeTank_CreateExplosion(g_fExplodeExplosionPos, 1.8);
     PrintToChatAll("[爆炸Tank] 第二次爆炸触发!");
     return Plugin_Stop;
 }
 
-// 创建爆炸效果
-void CreateExplosionEffect(float pos[3], float scale)
+// 创建爆炸效果（独立函数）
+void ExplodeTank_CreateExplosion(float pos[3], float scale)
 {
     PrintToServer("[爆炸TankDEBUG] 开始创建爆炸效果，scale=%.1f", scale);
 
@@ -121,7 +129,7 @@ void CreateExplosionEffect(float pos[3], float scale)
         ActivateEntity(particle);
 
         AcceptEntityInput(particle, "Start");
-        CreateTimer(0.5, Timer_RemoveExplosionParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
+        CreateTimer(0.5, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
 
         PrintToServer("[爆炸TankDEBUG] 粒子系统已创建: ent=%d", particle);
     }
@@ -157,7 +165,7 @@ void CreateExplosionEffect(float pos[3], float scale)
     PrintToChatAll("[爆炸Tank] 爆炸完成! 伤害=%d, 命中=%d人", damage, hitCount);
 }
 
-public Action Timer_RemoveExplosionParticle(Handle timer, int particleRef)
+public Action Timer_ExplodeTankRemoveParticle(Handle timer, int particleRef)
 {
     int particle = EntRefToEntIndex(particleRef);
     if (particle > 0 && IsValidEntity(particle))
@@ -167,8 +175,12 @@ public Action Timer_RemoveExplosionParticle(Handle timer, int particleRef)
     return Plugin_Stop;
 }
 
-// 清理爆炸Tank
-void ExplodeTank_Clear()
+// 爆炸Tank死亡时清理
+void ExplodeTank_OnDeath(int tank)
 {
-    g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
+    int currentExplodeTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+    if (currentExplodeTank == tank)
+    {
+        g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
+    }
 }
