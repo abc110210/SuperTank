@@ -97,7 +97,7 @@ public Action Timer_ValidateRock(Handle timer, int rockRef)
     }
 
     // 添加到追踪列表
-    if (g_iRockCount < MAXENTITIES)
+    if (g_iRockCount < MAX_ROCKS)
     {
         g_iExplodeRockEntRef[g_iRockCount] = EntIndexToEntRef(rock);
         g_bRockDestroyedByPlayer[g_iRockCount] = false;
