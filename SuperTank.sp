@@ -41,6 +41,7 @@ void ExplodeTank_OnEntityCreated(int entity, const char[] classname);
 bool ExplodeTank_IsTrackedRock(int index, int rockRef);
 int ExplodeTank_GetCurrentTank();
 void TriggerRockExplosion(float pos[3]);
+void ExplodeTank_RemoveRockTracking(int rockRef);
 
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
@@ -126,6 +127,9 @@ public void OnEntityDestroyed(int entity)
             if (thrower == currentTank)
             {
                 PrintToServer("[爆炸TankDEBUG] 石头销毁（击中玩家/障碍物），触发爆炸!");
+
+                // 清理石头跟踪
+                ExplodeTank_RemoveRockTracking(rockRef);
 
                 // 获取石头位置
                 float rockPos[3];

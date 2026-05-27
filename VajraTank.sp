@@ -4,8 +4,6 @@
  * 完全独立模块，不依赖其他模块
  */
 
-#define DMG_BULLET (1 << 1)
-
 // 金刚Tank独立的实体引用
 static int g_iThisVajraTankEntRef = INVALID_ENT_REFERENCE;
 static int g_iThisVajraShieldRef = INVALID_ENT_REFERENCE;

@@ -49,13 +49,13 @@ bool ExplodeTank_IsTankRock(int inflictor)
 }
 
 // 获取当前爆炸Tank
-int ExplodeTank_GetCurrentTank()
+public int ExplodeTank_GetCurrentTank()
 {
     return EntRefToEntIndex(g_iThisExplodeTankEntRef);
 }
 
 // 检查指定索引的石头是否匹配指定的引用
-bool ExplodeTank_IsTrackedRock(int index, int rockRef)
+public bool ExplodeTank_IsTrackedRock(int index, int rockRef)
 {
     if (index < 0 || index >= g_iRockCount)
         return false;
@@ -83,6 +83,34 @@ void ExplodeTank_ClearRockList()
     PrintToServer("[爆炸TankDEBUG] 石头跟踪列表已清理");
 }
 
+// 为石头添加榴弹炮轨迹特效
+void ExplodeTank_AddRockTrail(int rock, int rockIndex)
+{
+    // 点燃石头产生火焰烟雾轨迹（和mutant_tanks的meteor一样）
+    AcceptEntityInput(rock, "Ignite");
+    g_iRockTrailParticles[rockIndex] = INVALID_ENT_REFERENCE;
+    PrintToServer("[爆炸TankDEBUG] 已点燃石头添加轨迹特效: rock=%d", rock);
+}
+
+// 清理指定的石头跟踪（供SuperTank.sp调用）
+public void ExplodeTank_RemoveRockTracking(int rockRef)
+{
+    for (int i = 0; i < g_iRockCount; i++)
+    {
+        if (g_iExplodeTankRocks[i] == rockRef)
+        {
+            g_iExplodeTankRocks[i] = INVALID_ENT_REFERENCE;
+
+            int rock = EntRefToEntIndex(rockRef);
+            if (rock > 0 && IsValidEntity(rock))
+            {
+                SDKUnhook(rock, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+            }
+            break;
+        }
+    }
+}
+
 // 监听实体创建（用于跟踪爆炸Tank投掷的石头）
 public void ExplodeTank_OnEntityCreated(int entity, const char[] classname)
 {
@@ -104,6 +132,11 @@ public void ExplodeTank_OnEntityCreated(int entity, const char[] classname)
         if (g_iRockCount < MAX_ROCKS)
         {
             g_iExplodeTankRocks[g_iRockCount] = EntIndexToEntRef(entity);
+            g_iRockTrailParticles[g_iRockCount] = INVALID_ENT_REFERENCE;
+
+            // 添加榴弹炮轨迹特效
+            ExplodeTank_AddRockTrail(entity, g_iRockCount);
+
             g_iRockCount++;
             PrintToServer("[爆炸TankDEBUG] 石头已添加到跟踪列表: entity=%d, 总数=%d", entity, g_iRockCount);
 
@@ -249,7 +282,7 @@ void ExplodeTank_Apply(int tank)
 // ==================== 石头爆炸触发 ====================
 
 // 触发石头爆炸（在SuperTank.sp中调用）
-void TriggerRockExplosion(float pos[3])
+public void TriggerRockExplosion(float pos[3])
 {
     PrintToServer("[爆炸TankDEBUG] ========== 触发石头爆炸 ==========");
     PrintToServer("[爆炸TankDEBUG] pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
@@ -306,20 +339,16 @@ void ExplodeTank_SpawnBreakProp(float pos[3], char[] model)
 
 void ExplodeTank_CreateExplosion(float pos[3])
 {
-    PrintToServer("[爆炸TankDEBUG] 创建陨石爆炸: pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
+    PrintToServer("[爆炸TankDEBUG] 创建爆炸: pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
 
     // 获取配置的伤害值
     ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
     int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
 
-    // 使用陨石特效：创建可破坏的汽油罐和丙烷罐
-    ExplodeTank_SpawnBreakProp(pos, "models/props_junk/gascan001a.mdl");      // 汽油罐
-    ExplodeTank_SpawnBreakProp(pos, "models/props_junk/propanecanister001a.mdl"); // 丙烷罐
-
-    // 播放陨石爆炸音效
+    // 播放爆炸音效
     char soundPath[] = "weapons/pipe_bomb/explode3.wav";
     PrecacheSound(soundPath, true);
-    EmitAmbientSound(soundPath, pos, SNDLEVEL_GUNFIRE, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
+    EmitAmbientSound(soundPath, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
 
     // 对范围内幸存者造成伤害
     float explosionRadius = 250.0;
@@ -342,7 +371,7 @@ void ExplodeTank_CreateExplosion(float pos[3])
         }
     }
 
-    PrintToChatAll("[爆炸Tank] 陨石爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
+    PrintToChatAll("[爆炸Tank] 石头爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
 }
 
 public Action Timer_ExplodeTankRemoveParticle(Handle timer, int particleRef)
