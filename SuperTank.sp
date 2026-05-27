@@ -38,6 +38,9 @@ void ExplodeTank_ClearAllEffects(int tank);
 
 // 爆炸Tank模块前向声明
 void ExplodeTank_OnEntityCreated(int entity, const char[] classname);
+bool ExplodeTank_IsTrackedRock(int index, int rockRef);
+int ExplodeTank_GetCurrentTank();
+void TriggerRockExplosion(float pos[3]);
 
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
@@ -86,6 +89,49 @@ public void OnMapStart()
 public void OnEntityCreated(int entity, const char[] classname)
 {
     ExplodeTank_OnEntityCreated(entity, classname);
+}
+
+// 监听实体销毁（用于石头击中玩家/障碍物时触发爆炸）
+public void OnEntityDestroyed(int entity)
+{
+    char classname[64];
+    GetEntityClassname(entity, classname, sizeof(classname));
+
+    if (StrEqual(classname, "tank_rock", false))
+    {
+        // 检查是否在跟踪列表中
+        int rockRef = EntIndexToEntRef(entity);
+        bool isExplodeTankRock = false;
+        int thrower = -1;
+
+        for (int i = 0; i < 128; i++)  // MAX_ROCKS
+        {
+            if (ExplodeTank_IsTrackedRock(i, rockRef))
+            {
+                isExplodeTankRock = true;
+                // 获取投掷者
+                thrower = GetEntPropEnt(entity, Prop_Data, "m_hThrower");
+                break;
+            }
+        }
+
+        if (isExplodeTankRock && thrower > 0)
+        {
+            // 检查是否是爆炸Tank的石头
+            int currentTank = ExplodeTank_GetCurrentTank();
+            if (thrower == currentTank)
+            {
+                PrintToServer("[爆炸TankDEBUG] 石头销毁（击中玩家/障碍物），触发爆炸!");
+
+                // 获取石头位置
+                float rockPos[3];
+                GetEntPropVector(entity, Prop_Data, "m_vecOrigin", rockPos);
+
+                // 触发爆炸
+                TriggerRockExplosion(rockPos);
+            }
+        }
+    }
 }
 
 public void OnConfigsExecuted()

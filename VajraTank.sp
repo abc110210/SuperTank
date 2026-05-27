@@ -86,7 +86,7 @@ void VajraTank_CreateShield(int tank)
 }
 
 // 清理所有金刚Tank效果（包括移除Hook）
-void VajraTank_ClearAllEffects(int tank)
+public void VajraTank_ClearAllEffects(int tank)
 {
     // 移除SDKHook（重要：防止Hook残留）
     SDKUnhook(tank, SDKHook_OnTakeDamage, Hook_VajraOnTakeDamage);
