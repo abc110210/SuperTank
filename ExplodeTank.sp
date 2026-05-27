@@ -91,13 +91,13 @@ void ExplodeTank_ClearRockList()
 // 为石头添加榴弹炮轨迹特效
 void ExplodeTank_AddRockTrail(int rock, int rockIndex)
 {
-    // 增加石头血量，防止被点燃快速摧毁
-    SetEntProp(rock, Prop_Data, "m_iHealth", 1000);
-    SetEntProp(rock, Prop_Data, "m_iMaxHealth", 1000);
+    // 大幅增加石头血量，防止被点燃快速摧毁
+    SetEntProp(rock, Prop_Data, "m_iHealth", 5000);
+    SetEntProp(rock, Prop_Data, "m_iMaxHealth", 5000);
 
     // 点燃石头产生火焰烟雾轨迹（和mutant_tanks的meteor一样）
     AcceptEntityInput(rock, "Ignite");
-    PrintToServer("[爆炸TankDEBUG] 已点燃石头添加轨迹特效: rock=%d, 血量=1000", rock);
+    PrintToServer("[爆炸TankDEBUG] 已点燃石头添加轨迹特效: rock=%d, 血量=5000", rock);
 }
 
 // 清理指定的石头跟踪（供SuperTank.sp调用）
@@ -214,8 +214,8 @@ public Action Hook_RockTakeDamage(int victim, int &attacker, int &inflictor, flo
     int rockHealth = GetEntProp(victim, Prop_Data, "m_iHealth");
     PrintToServer("[爆炸TankDEBUG] 石头当前血量: %d, 受到伤害: %.1f", rockHealth, damage);
 
-    // 如果这次伤害会摧毁石头
-    if (rockHealth > 0 && damage >= rockHealth)
+    // 如果这次伤害会摧毁石头（且伤害足够大，避免点燃小伤害累积）
+    if (rockHealth > 0 && damage >= rockHealth && damage > 100.0)
     {
         PrintToServer("[爆炸TankDEBUG] 石头即将被摧毁，触发爆炸!");
 
@@ -363,7 +363,7 @@ void ExplodeTank_CreateExplosion(float pos[3])
     float damageRadius = (explosionRange != null) ? explosionRange.FloatValue : 300.0;  // 伤害范围（读取配置）
     float visualRadius = damageRadius * 2.0;  // 视觉特效范围是伤害范围的2倍
 
-    // 第一次爆炸：组合榴弹炮爆炸粒子（范围减半）
+    // 第一次爆炸：增加红色粒子，减少烟雾火焰
     for (int i = 0; i < 8; i++)
     {
         float offset[3];
@@ -374,15 +374,16 @@ void ExplodeTank_CreateExplosion(float pos[3])
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
 
-        // 组合榴弹炮爆炸效果
-        ShowParticle(adjustedPos, "gas_explosion_initialburst");
+        // 重点：增加红色火花粒子
         ShowParticle(adjustedPos, "gas_explosion_sparks_01");
+        ShowParticle(adjustedPos, "gas_explosion_sparks_01");  // 双倍红色粒子
+
+        // 少量烟雾和火焰
         ShowParticle(adjustedPos, "gas_explosion_smoke");
-        ShowParticle(adjustedPos, "gas_explosion_fireball");
     }
 
-    // 添加一些物理爆炸道具作为备用（范围减半）
-    for (int i = 0; i < 4; i++)
+    // 减少爆炸道具
+    for (int i = 0; i < 2; i++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-150.0, 150.0);
@@ -392,7 +393,6 @@ void ExplodeTank_CreateExplosion(float pos[3])
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
 
-        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
         ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
     }
 
