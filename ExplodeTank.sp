@@ -4,6 +4,38 @@
  * 基于Mutant Tanks的实现方式
  */
 
+// 爆炸Tank实体引用
+static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
+
+// ==================== 辅助函数（供SuperTank.sp调用）====================
+
+// 检查是否是爆炸Tank投掷的石头
+bool ExplodeTank_IsTankRock(int inflictor)
+{
+    if (inflictor <= 0 || !IsValidEntity(inflictor))
+        return false;
+
+    char classname[64];
+    GetEntityClassname(inflictor, classname, sizeof(classname));
+
+    if (!StrEqual(classname, "tank_rock", false))
+        return false;
+
+    // 检查是否是爆炸Tank投掷的
+    int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+    if (currentTank <= 0 || !IsValidEntity(currentTank))
+        return false;
+
+    int thrower = GetEntPropEnt(inflictor, Prop_Data, "m_hThrower");
+    return (thrower == currentTank);
+}
+
+// 获取当前爆炸Tank
+int ExplodeTank_GetCurrentTank()
+{
+    return EntRefToEntIndex(g_iThisExplodeTankEntRef);
+}
+
 // 爆炸Tank应用函数
 void ExplodeTank_Apply(int tank)
 {

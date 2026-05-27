@@ -29,9 +29,6 @@ ConVar g_cvarTankDamage;
 // 幸存者伤害Hook状态
 bool g_bSurvivorHooksSetup = false;
 
-// 爆炸Tank实体引用（供ExplodeTank.sp使用）
-static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
-
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
 #include "ExplodeTank.sp"
@@ -90,24 +87,8 @@ public void OnClientPutInServer(int client)
 // 石头爆炸检测（在OnTakeDamage中调用）
 void CheckExplodeTankRock(int victim, int inflictor, float damage)
 {
-    // 检查是否是爆炸Tank存在
-    int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
-    if (currentTank <= 0 || !IsValidEntity(currentTank))
-        return;
-
-    // 检查是否是石头造成的伤害
-    if (inflictor <= 0 || !IsValidEntity(inflictor))
-        return;
-
-    char classname[64];
-    GetEntityClassname(inflictor, classname, sizeof(classname));
-
-    if (!StrEqual(classname, "tank_rock", false))
-        return;
-
-    // 获取石头的投掷者
-    int thrower = GetEntPropEnt(inflictor, Prop_Data, "m_hThrower");
-    if (thrower != currentTank)
+    // 检查是否是爆炸Tank的石头
+    if (!ExplodeTank_IsTankRock(inflictor))
         return;
 
     PrintToServer("[爆炸TankDEBUG] 爆炸Tank的石头造成伤害: victim=%d, damage=%.1f", victim, damage);
