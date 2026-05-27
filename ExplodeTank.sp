@@ -414,7 +414,7 @@ void ExplodeTank_CreateExplosion(float pos[3])
                 NormalizeVector(pushDir, pushDir);
 
                 float pushForce = 500.0 * (1.0 - (distance / damageRadius));
-                ScaleVector(pushDir, pushDir);
+                ScaleVector(pushDir, pushForce);
 
                 // 应用击退
                 PushPlayer(i, pushDir);
@@ -430,7 +430,6 @@ void ExplodeTank_CreateExplosion(float pos[3])
     PrintToChatAll("[爆炸Tank] 石头爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
 }
 
-// 创建env_explosion爆炸效果
 // 显示粒子特效（榴弹炮爆炸效果）
 void ShowParticle(float pos[3], char[] particleName)
 {
