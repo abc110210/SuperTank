@@ -346,28 +346,30 @@ void ExplodeTank_CreateExplosion(float pos[3])
     float damageRadius = 250.0;      // 伤害范围
     float visualRadius = 500.0;      // 视觉特效范围
 
-    // 第一次爆炸：创建大量爆炸道具（中心爆炸）
-    for (int i = 0; i < 8; i++)
+    // 第一次爆炸：创建env_explosion（主要爆炸效果）
+    CreateEnvExplosion(pos);
+
+    // 创建少量爆炸道具（减少烟雾火焰）
+    for (int i = 0; i < 3; i++)
     {
         float offset[3];
-        offset[0] = GetRandomFloat(-150.0, 150.0);
-        offset[1] = GetRandomFloat(-150.0, 150.0);
-        offset[2] = GetRandomFloat(0.0, 80.0);
+        offset[0] = GetRandomFloat(-100.0, 100.0);
+        offset[1] = GetRandomFloat(-100.0, 100.0);
+        offset[2] = GetRandomFloat(0.0, 50.0);
 
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
 
-        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
         ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
     }
 
     PrintToServer("[爆炸TankDEBUG] 已创建第一次爆炸");
 
-    // 第二次爆炸：延迟0.1-0.3秒后在周围爆炸
-    CreateTimer(0.15, Timer_SecondaryExplosion, .flags = TIMER_FLAG_NO_MAPCHANGE);
+    // 第二次爆炸：延迟1秒后在周围爆炸
+    CreateTimer(1.0, Timer_SecondaryExplosion, .flags = TIMER_FLAG_NO_MAPCHANGE);
 
-    // 第三次爆炸：延迟0.3-0.5秒在更外围爆炸
-    CreateTimer(0.4, Timer_TertiaryExplosion, .flags = TIMER_FLAG_NO_MAPCHANGE);
+    // 第三次爆炸：延迟1.5秒在更外围爆炸
+    CreateTimer(1.5, Timer_TertiaryExplosion, .flags = TIMER_FLAG_NO_MAPCHANGE);
 
     // 播放第一层爆炸音效（低频冲击）
     char soundPath1[] = "weapons/hegrenade/explode5.wav";
@@ -416,6 +418,42 @@ void ExplodeTank_CreateExplosion(float pos[3])
     PrintToChatAll("[爆炸Tank] 石头爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
 }
 
+// 创建env_explosion爆炸效果
+void CreateEnvExplosion(float pos[3])
+{
+    int explosion = CreateEntityByName("env_explosion");
+    if (explosion != -1)
+    {
+        // 设置爆炸属性（参考mutant_tanks的配置）
+        DispatchKeyValue(explosion, "fireballsprite", "sprites/zerogxplode.spr");
+        DispatchKeyValue(explosion, "iMagnitude", "50");
+        DispatchKeyValue(explosion, "iRadiusOverride", "300");
+        DispatchKeyValue(explosion, "rendermode", "5");
+        DispatchKeyValue(explosion, "spawnflags", "1");  // 无烟雾
+
+        TeleportEntity(explosion, pos, NULL_VECTOR, NULL_VECTOR);
+        DispatchSpawn(explosion);
+        ActivateEntity(explosion);
+
+        AcceptEntityInput(explosion, "Explode");
+
+        // 延迟删除实体
+        CreateTimer(0.5, Timer_DeleteExplosion, EntIndexToEntRef(explosion), TIMER_FLAG_NO_MAPCHANGE);
+
+        PrintToServer("[爆炸TankDEBUG] 已创建env_explosion");
+    }
+}
+
+public Action Timer_DeleteExplosion(Handle timer, int explosionRef)
+{
+    int explosion = EntRefToEntIndex(explosionRef);
+    if (explosion > 0 && IsValidEntity(explosion))
+    {
+        AcceptEntityInput(explosion, "Kill");
+    }
+    return Plugin_Stop;
+}
+
 // 第二次爆炸（在第一次爆炸周围）
 public Action Timer_SecondaryExplosion(Handle timer)
 {
@@ -430,19 +468,18 @@ public Action Timer_SecondaryExplosion(Handle timer)
                 float rockPos[3];
                 GetEntPropVector(rock, Prop_Data, "m_vecOrigin", rockPos);
 
-                // 在石头位置周围创建二次爆炸
-                for (int j = 0; j < 6; j++)
+                // 在石头位置周围创建二次env_explosion
+                for (int j = 0; j < 3; j++)
                 {
                     float offset[3];
                     offset[0] = GetRandomFloat(-200.0, 200.0);
                     offset[1] = GetRandomFloat(-200.0, 200.0);
-                    offset[2] = GetRandomFloat(0.0, 100.0);
+                    offset[2] = GetRandomFloat(0.0, 50.0);
 
                     float adjustedPos[3];
                     AddVectors(rockPos, offset, adjustedPos);
 
-                    ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
-                    ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
+                    CreateEnvExplosion(adjustedPos);
                 }
 
                 // 播放二次爆炸音效（组合）
@@ -475,19 +512,18 @@ public Action Timer_TertiaryExplosion(Handle timer)
                 float rockPos[3];
                 GetEntPropVector(rock, Prop_Data, "m_vecOrigin", rockPos);
 
-                // 在更外围创建三次爆炸
-                for (int j = 0; j < 4; j++)
+                // 在更外围创建三次env_explosion
+                for (int j = 0; j < 2; j++)
                 {
                     float offset[3];
                     offset[0] = GetRandomFloat(-300.0, 300.0);
                     offset[1] = GetRandomFloat(-300.0, 300.0);
-                    offset[2] = GetRandomFloat(0.0, 120.0);
+                    offset[2] = GetRandomFloat(0.0, 80.0);
 
                     float adjustedPos[3];
                     AddVectors(rockPos, offset, adjustedPos);
 
-                    ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
-                    ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
+                    CreateEnvExplosion(adjustedPos);
                 }
 
                 // 播放三次爆炸音效（组合）
