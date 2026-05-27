@@ -24,8 +24,12 @@ void ExplodeTank_Apply(int tank)
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
-    // Hook Tank的攻击事件
-    SDKHook(tank, SDKHook_OnTakeDamage, Hook_ExplodeTank_Damage);
+    // Hook所有实体输出事件（全局监听）
+    HookEntityOutput("tank_rock", "OnKilled", Hook_TankRockKilled);
+    HookEntityOutput("tank_rock", "OnBreak", Hook_TankRockKilled);
+    HookEntityOutput("prop_physics", "OnBreak", Hook_TankRockKilled);
+
+    PrintToServer("[爆炸TankDEBUG] 已Hook石头事件");
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -40,117 +44,59 @@ void ExplodeTank_Apply(int tank)
     PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x02爆炸Tank \x01已出现!");
 }
 
-// Tank受到伤害时的处理（检测石头投掷）
-public Action Hook_ExplodeTank_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+// Tank石头被杀死/破坏时的处理
+void Hook_TankRockKilled(const char[] output, int caller, int activator, float delay)
 {
-    // 检查受害者是否是爆炸Tank
-    int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
-    if (victim != currentTank)
-        return Plugin_Continue;
+    PrintToServer("[爆炸TankDEBUG] 石头事件触发: output=%s, caller=%d, activator=%d", output, caller, activator);
 
-    PrintToServer("[爆炸TankDEBUG] Tank受到伤害，检查是否投掷石头");
+    if (caller <= 0 || !IsValidEntity(caller))
+        return;
 
-    // 延迟检查是否有石头实体被创建
-    CreateTimer(0.1, Timer_CheckForRocks, _, TIMER_FLAG_NO_MAPCHANGE);
+    // 获取实体类名
+    char className[64];
+    GetEntityClassname(caller, className, sizeof(className));
+    PrintToServer("[爆炸TankDEBUG] 实体类名: %s", className);
 
-    return Plugin_Continue;
-}
-
-// 检查周围的石头实体
-public Action Timer_CheckForRocks(Handle timer)
-{
-    int currentTank = EntRefToEntIndex(g_iExplodeTankEntRef);
-    if (currentTank <= 0)
-        return Plugin_Stop;
-
-    float tankPos[3];
-    GetClientAbsOrigin(currentTank, tankPos);
-
-    // 搜索周围的石头实体
-    int rockCount = 0;
-    for (int i = MaxClients + 1; i < GetMaxEntities(); i++)
-    {
-        if (!IsValidEntity(i))
-            continue;
-
-        char className[64];
-        GetEntityClassname(i, className, sizeof(className));
-
-        // 检查是否是石头相关实体
-        if (StrContains(className, "tank_rock", false) != -1 ||
-            StrContains(className, "prop_physics", false) != -1)
-        {
-            char modelName[128];
-            GetEntPropString(i, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
-
-            if (StrContains(modelName, "rock", false) != -1)
-            {
-                float rockPos[3];
-                GetEntPropVector(i, Prop_Send, "m_vecOrigin", rockPos);
-
-                float distance = GetVectorDistance(tankPos, rockPos, false);
-                if (distance < 500.0)
-                {
-                    PrintToServer("[爆炸TankDEBUG] 发现石头实体: ent=%d, model=%s", i, modelName);
-                    rockCount++;
-
-                    // Hook这个石头的销毁事件
-                    SDKHook(i, SDKHook_OnTakeDamage, Hook_ExplodeRock_Damage);
-                }
-            }
-        }
-    }
-
-    PrintToServer("[爆炸TankDEBUG] 共发现 %d 个石头实体", rockCount);
-    return Plugin_Stop;
-}
-
-// 石头被伤害时检查是否销毁
-public Action Hook_ExplodeRock_Damage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
-{
-    // 检查是否是石头
+    // 获取模型名称
     char modelName[128];
-    GetEntPropString(victim, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+    GetEntPropString(caller, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+    PrintToServer("[爆炸TankDEBUG] 模型名称: %s", modelName);
 
-    if (StrContains(modelName, "rock", false) == -1)
-        return Plugin_Continue;
-
-    // 检查石头是否被销毁
-    int health = GetEntProp(victim, Prop_Data, "m_iHealth");
-    if (health <= 0 || damage >= health)
+    // 检查是否是石头模型
+    if (StrContains(modelName, "rock", false) == -1 && StrContains(className, "tank_rock", false) == -1)
     {
-        PrintToChatAll("[爆炸Tank] 石头被破坏! model=%s", modelName);
-
-        // 爆炸概率检查
-        ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
-        int explosionChance = (explosionRandom != null) ? explosionRandom.IntValue : 100;
-
-        if (GetRandomInt(1, 100) <= explosionChance)
-        {
-            // 获取当前位置
-            float pos[3];
-            GetEntPropVector(victim, Prop_Send, "m_vecOrigin", pos);
-
-            PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
-
-            // 创建第一次爆炸
-            CreateExplosionEffect(pos, 1.5);
-
-            // 存储位置用于第二次爆炸
-            g_fExplosionPos[0] = pos[0];
-            g_fExplosionPos[1] = pos[1];
-            g_fExplosionPos[2] = pos[2];
-
-            // 延迟创建第二次爆炸
-            CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
-        }
-        else
-        {
-            PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
-        }
+        PrintToServer("[爆炸TankDEBUG] 不是石头实体");
+        return;
     }
 
-    return Plugin_Continue;
+    PrintToChatAll("[爆炸Tank] 检测到Tank石头破碎!");
+
+    // 爆炸概率检查
+    ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
+    int explosionChance = (explosionRandom != null) ? explosionRandom.IntValue : 100;
+
+    if (GetRandomInt(1, 100) > explosionChance)
+    {
+        PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
+        return;
+    }
+
+    // 获取当前位置
+    float pos[3];
+    GetEntPropVector(caller, Prop_Send, "m_vecOrigin", pos);
+
+    PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
+
+    // 创建第一次爆炸
+    CreateExplosionEffect(pos, 1.5);
+
+    // 存储位置用于第二次爆炸
+    g_fExplosionPos[0] = pos[0];
+    g_fExplosionPos[1] = pos[1];
+    g_fExplosionPos[2] = pos[2];
+
+    // 延迟创建第二次爆炸
+    CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)
@@ -163,7 +109,7 @@ public Action Timer_ExplodeTankSecondExplosion(Handle timer)
 // 创建爆炸效果
 void CreateExplosionEffect(float pos[3], float scale)
 {
-    PrintToServer("[爆炸TankDEBUG] 开始创建爆炸效果");
+    PrintToServer("[爆炸TankDEBUG] 开始创建爆炸效果，scale=%.1f", scale);
 
     // 创建爆炸粒子效果
     int particle = CreateEntityByName("info_particle_system");
