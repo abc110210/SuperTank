@@ -30,7 +30,7 @@ bool ExplodeTank_IsTankRock(int inflictor)
     int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
     PrintToServer("[爆炸TankDEBUG] 当前爆炸Tank=%d, 检查有效性", currentTank);
 
-    if (currentTank <= 0 || !IsValidEntity(currentTank))
+    if (currentTank <= 0 || !IsClientInGame(currentTank))
     {
         PrintToServer("[爆炸TankDEBUG] 没有爆炸Tank存在");
         return false;
@@ -59,18 +59,15 @@ void ExplodeTank_Apply(int tank)
     if (zClass != 8)
         return;
 
-    // 防止重复应用
-    int currentExplodeTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
-    if (currentExplodeTank == tank)
-    {
-        PrintToServer("[爆炸TankDEBUG] 已经是爆炸Tank，跳过重复应用");
-        return;
-    }
+    // 先清理所有类型的旧效果（重要：防止不同Tank类型之间的干扰）
+    ExplodeTank_ClearAllEffects(tank);
+    VajraTank_ClearAllEffects(tank);
 
-    PrintToServer("[爆炸TankDEBUG] 应用爆炸Tank: tank=%d, userid=%d", tank, GetClientUserId(tank));
+    PrintToServer("[爆炸TankDEBUG] 应用爆炸Tank: tank=%d, userid=%d, entref=%d", tank, GetClientUserId(tank), EntIndexToEntRef(tank));
 
     // 标记为爆炸Tank
     g_iThisExplodeTankEntRef = EntIndexToEntRef(tank);
+    PrintToServer("[爆炸TankDEBUG] 爆炸Tank引用已设置: g_iThisExplodeTankEntRef=%d", g_iThisExplodeTankEntRef);
 
     // 设置红色皮肤
     SetEntityRenderMode(tank, RENDER_NORMAL);
@@ -90,7 +87,7 @@ void ExplodeTank_Apply(int tank)
 
     PrintToServer("[爆炸TankDEBUG] 设置血量: %d (玩家数=%d, 每人血量=%d)", finalHP, playerCount, hpPerPlayer);
 
-    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x02爆炸Tank \x01已出现!");
+    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x06爆炸Tank \x01已出现!");
 }
 
 // ==================== 石头爆炸触发 ====================
@@ -105,9 +102,10 @@ void TriggerRockExplosion(float pos[3])
     ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
     int explosionChance = (explosionRandom != null) ? explosionRandom.IntValue : 100;
 
-    PrintToServer("[爆炸TankDEBUG] 爆炸概率检查: 随机数=%d, 需求=%d", GetRandomInt(1, 100), explosionChance);
+    int randomRoll = GetRandomInt(1, 100);
+    PrintToServer("[爆炸TankDEBUG] 爆炸概率检查: 随机数=%d, 需求=%d", randomRoll, explosionChance);
 
-    if (GetRandomInt(1, 100) > explosionChance)
+    if (randomRoll > explosionChance)
     {
         PrintToChatAll("[爆炸Tank] 爆炸概率未通过");
         return;
@@ -230,6 +228,17 @@ public Action Timer_ExplodeTankRemoveParticle(Handle timer, int particleRef)
 }
 
 // ==================== 清理函数 ====================
+
+// 清理所有爆炸Tank效果
+void ExplodeTank_ClearAllEffects(int tank)
+{
+    // 清除引用
+    int currentExplodeTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+    if (currentExplodeTank == tank)
+    {
+        g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
+    }
+}
 
 void ExplodeTank_ClearEffects(int tank)
 {

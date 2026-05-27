@@ -29,6 +29,13 @@ ConVar g_cvarTankDamage;
 // 幸存者伤害Hook状态
 bool g_bSurvivorHooksSetup = false;
 
+// 标记：手动生成的Tank，防止Event_TankSpawn重复处理
+bool g_bManualTankSpawn = false;
+
+// 共享函数前向声明（让各模块可以互相调用清理函数）
+void VajraTank_ClearAllEffects(int tank);
+void ExplodeTank_ClearAllEffects(int tank);
+
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
 #include "ExplodeTank.sp"
@@ -92,6 +99,13 @@ void CheckExplodeTankRock(int victim, int inflictor, float damage)
 {
     PrintToServer("[爆炸TankDEBUG] ========== 石头检测开始 ==========");
     PrintToServer("[爆炸TankDEBUG] victim=%d, inflictor=%d, damage=%.1f", victim, inflictor, damage);
+
+    // 检查inflictor是否有效
+    if (inflictor <= 0)
+    {
+        PrintToServer("[爆炸TankDEBUG] inflictor无效，跳过检测");
+        return;
+    }
 
     // 检查是否是爆炸Tank的石头
     if (!ExplodeTank_IsTankRock(inflictor))
@@ -229,6 +243,9 @@ void SpawnVajraTank(int client)
     if (!IsClientInGame(client) || !IsPlayerAlive(client))
         return;
 
+    // 标记为手动生成，防止Event_TankSpawn重复处理
+    g_bManualTankSpawn = true;
+
     float pos[3], ang[3];
     GetClientAbsOrigin(client, pos);
     GetClientAbsAngles(client, ang);
@@ -239,12 +256,18 @@ void SpawnVajraTank(int client)
         // 调用模块函数
         VajraTank_Apply(tank);
     }
+
+    // 延迟重置标记
+    CreateTimer(1.0, Timer_ResetManualSpawn, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 void SpawnExplodeTank(int client)
 {
     if (!IsClientInGame(client) || !IsPlayerAlive(client))
         return;
+
+    // 标记为手动生成，防止Event_TankSpawn重复处理
+    g_bManualTankSpawn = true;
 
     float pos[3], ang[3];
     GetClientAbsOrigin(client, pos);
@@ -256,6 +279,9 @@ void SpawnExplodeTank(int client)
         // 调用模块函数
         ExplodeTank_Apply(tank);
     }
+
+    // 延迟重置标记
+    CreateTimer(1.0, Timer_ResetManualSpawn, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 void SpawnNormalTank(int client)
@@ -274,6 +300,13 @@ void SpawnNormalTank(int client)
 
 public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 {
+    // 如果是手动生成的Tank，跳过自动处理
+    if (g_bManualTankSpawn)
+    {
+        PrintToServer("[TankSpawnDEBUG] 跳过手动生成的Tank");
+        return;
+    }
+
     int tank = GetClientOfUserId(event.GetInt("userid"));
     if (tank <= 0 || !IsClientInGame(tank))
         return;
@@ -309,6 +342,12 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
         PrintToServer("[TankSpawnDEBUG] 选择普通Tank");
     }
     // 剩余概率为普通Tank
+}
+
+public Action Timer_ResetManualSpawn(Handle timer)
+{
+    g_bManualTankSpawn = false;
+    return Plugin_Stop;
 }
 
 // ==================== 玩家生成事件 ====================

@@ -21,8 +21,9 @@ void VajraTank_Apply(int tank)
     if (zClass != 8)
         return;
 
-    // 先清理旧效果（如果有）
-    VajraTank_ClearEffects(tank);
+    // 先清理所有类型的旧效果（重要：防止不同Tank类型之间的干扰）
+    VajraTank_ClearAllEffects(tank);
+    ExplodeTank_ClearAllEffects(tank);
 
     // 标记为金刚Tank
     g_iThisVajraTankEntRef = EntIndexToEntRef(tank);
@@ -44,7 +45,7 @@ void VajraTank_Apply(int tank)
     SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
     SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
-    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x05金刚Tank \x01已出现!");
+    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x06金刚Tank \x01已出现!");
 
     // 添加防护罩
     VajraTank_CreateShield(tank);
@@ -84,18 +85,32 @@ void VajraTank_CreateShield(int tank)
     }
 }
 
-// 清理金刚Tank效果
-void VajraTank_ClearEffects(int tank)
+// 清理所有金刚Tank效果（包括移除Hook）
+void VajraTank_ClearAllEffects(int tank)
 {
-    // 检查是否是之前的金刚Tank
+    // 移除SDKHook（重要：防止Hook残留）
+    SDKUnhook(tank, SDKHook_OnTakeDamage, Hook_VajraOnTakeDamage);
+
+    // 移除防护罩
+    VajraTank_RemoveShield();
+
+    // 清除引用
     int currentVajraTank = EntRefToEntIndex(g_iThisVajraTankEntRef);
     if (currentVajraTank == tank)
     {
-        // 移除防护罩
+        g_iThisVajraTankEntRef = INVALID_ENT_REFERENCE;
+    }
+}
+
+// 清理金刚Tank效果（保留颜色）
+void VajraTank_ClearEffects(int tank)
+{
+    // 只移除防护罩，保留颜色和Hook
+    int currentVajraTank = EntRefToEntIndex(g_iThisVajraTankEntRef);
+    if (currentVajraTank == tank)
+    {
         VajraTank_RemoveShield();
     }
-
-    // 不重置颜色，让Tank尸体保留皮肤颜色
 }
 
 // 移除金刚Tank防护罩
