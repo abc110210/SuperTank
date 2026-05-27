@@ -85,12 +85,6 @@ public void OnMapStart()
 // 监听实体创建（用于石头跟踪）
 public void OnEntityCreated(int entity, const char[] classname)
 {
-    // 调试：显示所有实体创建
-    if (StrEqual(classname, "tank_rock", false))
-    {
-        PrintToServer("[爆炸TankDEBUG] OnEntityCreated被调用: entity=%d, classname=%s", entity, classname);
-    }
-
     ExplodeTank_OnEntityCreated(entity, classname);
 }
 
