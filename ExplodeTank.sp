@@ -13,6 +13,10 @@ static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
 static int g_iExplodeTankRocks[MAX_ROCKS];
 static int g_iRockCount = 0;
 
+// 保存最后爆炸位置（用于二次爆炸）
+static float g_fLastExplosionPos[3];
+static bool g_bHasLastExplosionPos = false;
+
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
 // 检查是否是爆炸Tank投掷的石头
@@ -340,20 +344,26 @@ void ExplodeTank_CreateExplosion(float pos[3])
 {
     PrintToServer("[爆炸TankDEBUG] 创建爆炸: pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
 
+    // 保存爆炸位置供二次爆炸使用
+    g_fLastExplosionPos[0] = pos[0];
+    g_fLastExplosionPos[1] = pos[1];
+    g_fLastExplosionPos[2] = pos[2];
+    g_bHasLastExplosionPos = true;
+
     // 获取配置的伤害值
     ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
     int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
 
-    float damageRadius = 250.0;      // 伤害范围
-    float visualRadius = 500.0;      // 视觉特效范围
+    float damageRadius = 500.0;      // 伤害范围
+    float visualRadius = 1200.0;     // 视觉特效范围
 
-    // 第一次爆炸：使用榴弹炮粒子特效
-    for (int i = 0; i < 5; i++)
+    // 第一次爆炸：使用榴弹炮粒子特效（扩大范围到1200）
+    for (int i = 0; i < 8; i++)
     {
         float offset[3];
-        offset[0] = GetRandomFloat(-100.0, 100.0);
-        offset[1] = GetRandomFloat(-100.0, 100.0);
-        offset[2] = GetRandomFloat(0.0, 50.0);
+        offset[0] = GetRandomFloat(-600.0, 600.0);
+        offset[1] = GetRandomFloat(-600.0, 600.0);
+        offset[2] = GetRandomFloat(0.0, 200.0);
 
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
@@ -361,13 +371,13 @@ void ExplodeTank_CreateExplosion(float pos[3])
         ShowParticle(adjustedPos, "weapon_grenade_explosion");
     }
 
-    // 创建少量爆炸道具增强视觉冲击
+    // 创建少量爆炸道具增强视觉冲击（扩大范围）
     for (int i = 0; i < 4; i++)
     {
         float offset[3];
-        offset[0] = GetRandomFloat(-100.0, 100.0);
-        offset[1] = GetRandomFloat(-100.0, 100.0);
-        offset[2] = GetRandomFloat(0.0, 50.0);
+        offset[0] = GetRandomFloat(-400.0, 400.0);
+        offset[1] = GetRandomFloat(-400.0, 400.0);
+        offset[2] = GetRandomFloat(0.0, 150.0);
 
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
@@ -393,8 +403,8 @@ void ExplodeTank_CreateExplosion(float pos[3])
     PrecacheSound(soundPath2, true);
     EmitAmbientSound(soundPath2, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
 
-    // 屏幕震动（使用视觉特效范围）
-    ShakeScreen(pos, visualRadius);
+    // 屏幕震动（固定1200范围）
+    ShakeScreen(pos, 1200.0);
 
     // 击退幸存者并造成伤害（使用伤害范围）
     int hitCount = 0;
@@ -462,89 +472,66 @@ public Action Timer_DeleteParticle(Handle timer, int particleRef)
 // 第二次爆炸（在第一次爆炸周围）
 public Action Timer_SecondaryExplosion(Handle timer)
 {
-    // 获取最近的石头爆炸位置
-    for (int i = 0; i < g_iRockCount; i++)
+    if (!g_bHasLastExplosionPos)
+        return Plugin_Stop;
+
+    // 使用保存的爆炸位置创建二次爆炸（扩大到1200范围）
+    for (int j = 0; j < 6; j++)
     {
-        if (g_iExplodeTankRocks[i] != INVALID_ENT_REFERENCE)
-        {
-            int rock = EntRefToEntIndex(g_iExplodeTankRocks[i]);
-            if (rock > 0 && IsValidEntity(rock))
-            {
-                float rockPos[3];
-                GetEntPropVector(rock, Prop_Data, "m_vecOrigin", rockPos);
+        float offset[3];
+        offset[0] = GetRandomFloat(-600.0, 600.0);
+        offset[1] = GetRandomFloat(-600.0, 600.0);
+        offset[2] = GetRandomFloat(0.0, 200.0);
 
-                // 在石头位置周围创建二次粒子特效
-                for (int j = 0; j < 3; j++)
-                {
-                    float offset[3];
-                    offset[0] = GetRandomFloat(-200.0, 200.0);
-                    offset[1] = GetRandomFloat(-200.0, 200.0);
-                    offset[2] = GetRandomFloat(0.0, 50.0);
+        float adjustedPos[3];
+        AddVectors(g_fLastExplosionPos, offset, adjustedPos);
 
-                    float adjustedPos[3];
-                    AddVectors(rockPos, offset, adjustedPos);
-
-                    ShowParticle(adjustedPos, "weapon_grenade_explosion");
-                }
-
-                // 播放二次爆炸音效（组合）
-                char soundPath[] = "weapons/hegrenade/explode5.wav";
-                PrecacheSound(soundPath, true);
-                EmitAmbientSound(soundPath, rockPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-                char soundPath2[] = "ambient/explosions/explode_2.wav";
-                PrecacheSound(soundPath2, true);
-                EmitAmbientSound(soundPath2, rockPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-                PrintToServer("[爆炸TankDEBUG] 已创建第二次爆炸");
-                break;
-            }
-        }
+        ShowParticle(adjustedPos, "weapon_grenade_explosion");
     }
+
+    // 播放二次爆炸音效（组合）
+    char soundPath[] = "weapons/hegrenade/explode5.wav";
+    PrecacheSound(soundPath, true);
+    EmitAmbientSound(soundPath, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
+
+    char soundPath2[] = "ambient/explosions/explode_2.wav";
+    PrecacheSound(soundPath2, true);
+    EmitAmbientSound(soundPath2, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
+
+    PrintToServer("[爆炸TankDEBUG] 已创建第二次爆炸");
     return Plugin_Stop;
 }
 
 // 第三次爆炸（更外围）
 public Action Timer_TertiaryExplosion(Handle timer)
 {
-    for (int i = 0; i < g_iRockCount; i++)
+    if (!g_bHasLastExplosionPos)
+        return Plugin_Stop;
+
+    // 在更外围创建三次爆炸（扩大到1200范围）
+    for (int j = 0; j < 4; j++)
     {
-        if (g_iExplodeTankRocks[i] != INVALID_ENT_REFERENCE)
-        {
-            int rock = EntRefToEntIndex(g_iExplodeTankRocks[i]);
-            if (rock > 0 && IsValidEntity(rock))
-            {
-                float rockPos[3];
-                GetEntPropVector(rock, Prop_Data, "m_vecOrigin", rockPos);
+        float offset[3];
+        offset[0] = GetRandomFloat(-600.0, 600.0);
+        offset[1] = GetRandomFloat(-600.0, 600.0);
+        offset[2] = GetRandomFloat(0.0, 200.0);
 
-                // 在更外围创建三次粒子特效
-                for (int j = 0; j < 2; j++)
-                {
-                    float offset[3];
-                    offset[0] = GetRandomFloat(-300.0, 300.0);
-                    offset[1] = GetRandomFloat(-300.0, 300.0);
-                    offset[2] = GetRandomFloat(0.0, 80.0);
+        float adjustedPos[3];
+        AddVectors(g_fLastExplosionPos, offset, adjustedPos);
 
-                    float adjustedPos[3];
-                    AddVectors(rockPos, offset, adjustedPos);
-
-                    ShowParticle(adjustedPos, "weapon_grenade_explosion");
-                }
-
-                // 播放三次爆炸音效（组合）
-                char soundPath[] = "weapons/hegrenade/explode5.wav";
-                PrecacheSound(soundPath, true);
-                EmitAmbientSound(soundPath, rockPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-                char soundPath2[] = "ambient/explosions/explode_2.wav";
-                PrecacheSound(soundPath2, true);
-                EmitAmbientSound(soundPath2, rockPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-                PrintToServer("[爆炸TankDEBUG] 已创建第三次爆炸");
-                break;
-            }
-        }
+        ShowParticle(adjustedPos, "weapon_grenade_explosion");
     }
+
+    // 播放三次爆炸音效（组合）
+    char soundPath[] = "weapons/hegrenade/explode5.wav";
+    PrecacheSound(soundPath, true);
+    EmitAmbientSound(soundPath, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
+
+    char soundPath2[] = "ambient/explosions/explode_2.wav";
+    PrecacheSound(soundPath2, true);
+    EmitAmbientSound(soundPath2, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
+
+    PrintToServer("[爆炸TankDEBUG] 已创建第三次爆炸");
     return Plugin_Stop;
 }
 
