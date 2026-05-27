@@ -13,6 +13,9 @@ static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
 static int g_iExplodeTankRocks[MAX_ROCKS];
 static int g_iRockCount = 0;
 
+// 前向声明
+void ExplodeTank_SpawnBreakProp(float pos[3], const char[] model);
+
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
 // 检查是否是爆炸Tank投掷的石头
@@ -274,9 +277,6 @@ void TriggerRockExplosion(float pos[3])
 }
 
 // ==================== 爆炸效果 ====================
-
-// 前向声明
-void ExplodeTank_SpawnBreakProp(float pos[3], const char[] model);
 
 void ExplodeTank_CreateExplosion(float pos[3])
 {
