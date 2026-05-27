@@ -83,6 +83,10 @@ public void OnMapStart()
 {
     // 预缓存防护罩模型
     PrecacheModel("models/props_unique/airport/atlas_break_ball.mdl", true);
+
+    // 预缓存爆炸模型（汽油罐和丙烷罐）
+    PrecacheModel("models/props_junk/gascan001a.mdl", true);
+    PrecacheModel("models/props_junk/propanecanister001a.mdl", true);
 }
 
 // 监听实体创建（用于石头跟踪）

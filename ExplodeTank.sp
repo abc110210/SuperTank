@@ -287,37 +287,21 @@ void ExplodeTank_SpawnBreakProp(float pos[3], char[] model)
         SetEntProp(prop, Prop_Data, "m_iHealth", 1);
         SetEntProp(prop, Prop_Data, "m_iMaxHealth", 1);
 
-        TeleportEntity(prop, pos, NULL_VECTOR, NULL_VECTOR);
+        // 设置随机旋转角度，让爆炸效果更自然
+        float angles[3];
+        angles[0] = GetRandomFloat(0.0, 360.0);
+        angles[1] = GetRandomFloat(0.0, 360.0);
+        angles[2] = GetRandomFloat(0.0, 360.0);
+
+        TeleportEntity(prop, pos, angles, NULL_VECTOR);
         DispatchSpawn(prop);
         ActivateEntity(prop);
 
-        // 延迟0.05秒后引爆（确保道具已经完全生成）
-        DataPack pack = new DataPack();
-        pack.WriteCell(EntIndexToEntRef(prop));
-        pack.WriteString(model);
-        CreateTimer(0.05, Timer_ExplodeTankIgniteProp, pack, TIMER_FLAG_NO_MAPCHANGE);
-
-        PrintToServer("[爆炸TankDEBUG] 创建可破坏道具: %s", model);
-    }
-}
-
-public Action Timer_ExplodeTankIgniteProp(Handle timer, DataPack pack)
-{
-    pack.Reset();
-    int propRef = pack.ReadCell();
-    char model[128];
-    pack.ReadString(model, sizeof(model));
-    delete pack;
-
-    int prop = EntRefToEntIndex(propRef);
-    if (prop > 0 && IsValidEntity(prop))
-    {
-        // 接受输入"Break"会立即摧毁道具并触发爆炸
+        // 立即引爆道具
         AcceptEntityInput(prop, "Break");
-        PrintToServer("[爆炸TankDEBUG] 引爆道具: %s", model);
-    }
 
-    return Plugin_Stop;
+        PrintToServer("[爆炸TankDEBUG] 创建并引爆道具: %s", model);
+    }
 }
 
 void ExplodeTank_CreateExplosion(float pos[3])
