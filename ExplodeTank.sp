@@ -345,36 +345,32 @@ void ExplodeTank_CreateExplosion(float pos[3])
 
     float explosionRadius = 250.0;
 
-    // 创建env_explosion实体（榴弹发射器爆炸效果）
-    int explosion = CreateEntityByName("env_explosion");
-    if (explosion != -1)
+    // 创建多个爆炸道具（主要的爆炸视觉效果）
+    for (int i = 0; i < 3; i++)
     {
-        // 设置爆炸属性
-        SetEntProp(explosion, Prop_Data, "m_iMagnitude", damage);      // 爆炸伤害
-        SetEntProp(explosion, Prop_Data, "m_iRadiusOverride", RoundToFloor(explosionRadius));  // 爆炸半径
+        float offset[3];
+        offset[0] = GetRandomFloat(-50.0, 50.0);
+        offset[1] = GetRandomFloat(-50.0, 50.0);
+        offset[2] = GetRandomFloat(0.0, 50.0);
 
-        // 设置爆炸位置
-        TeleportEntity(explosion, pos, NULL_VECTOR, NULL_VECTOR);
+        float adjustedPos[3];
+        AddVectors(pos, offset, adjustedPos);
 
-        // 设置为榴弹发射器爆炸类型
-        SetEntProp(explosion, Prop_Data, "m_spawnflags", 62);  // 62 = smoke + sparks + debris
-
-        DispatchSpawn(explosion);
-        ActivateEntity(explosion);
-
-        // 触发爆炸
-        AcceptEntityInput(explosion, "Explode");
-
-        // 延迟删除实体
-        AcceptEntityInput(explosion, "Kill");
-
-        PrintToServer("[爆炸TankDEBUG] 已创建env_explosion: damage=%d, radius=%f", damage, explosionRadius);
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
     }
+
+    PrintToServer("[爆炸TankDEBUG] 已创建爆炸道具");
 
     // 播放榴弹发射器爆炸音效
     char soundPath[] = "weapons/grenade_launcher/grenadefire/grenade_explode1.wav";
     PrecacheSound(soundPath, true);
     EmitAmbientSound(soundPath, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
+
+    // 播放pipe炸弹爆炸音效（备选）
+    char soundPath2[] = "weapons/pipe_bomb/explode3.wav";
+    PrecacheSound(soundPath2, true);
+    EmitAmbientSound(soundPath2, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
 
     // 屏幕震动
     ShakeScreen(pos, explosionRadius);
