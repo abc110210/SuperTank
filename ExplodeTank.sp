@@ -74,26 +74,51 @@ void ExplodeTank_ClearRockList()
 // 监听实体创建（用于跟踪爆炸Tank投掷的石头）
 void ExplodeTank_OnEntityCreated(int entity, const char[] classname)
 {
+    PrintToServer("[爆炸TankDEBUG] ExplodeTank_OnEntityCreated被调用: entity=%d, classname=%s", entity, classname);
+
     if (StrEqual(classname, "tank_rock", false))
     {
+        PrintToServer("[爆炸TankDEBUG] 检测到tank_rock创建");
+
         int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+        PrintToServer("[爆炸TankDEBUG] 当前爆炸Tank引用检查: entref=%d, tank=%d", g_iThisExplodeTankEntRef, currentTank);
+
         if (currentTank > 0 && IsClientInGame(currentTank))
         {
+            PrintToServer("[爆炸TankDEBUG] 当前爆炸Tank有效");
+
             // 检查是否是当前爆炸Tank投掷的
             int thrower = GetEntPropEnt(entity, Prop_Data, "m_hThrower");
+            PrintToServer("[爆炸TankDEBUG] 石头投掷者检查: thrower=%d, tank=%d", thrower, currentTank);
+
             if (thrower == currentTank)
             {
+                PrintToServer("[爆炸TankDEBUG] 石头投掷者匹配！");
+
                 // 添加到石头跟踪列表
                 if (g_iRockCount < MAX_ROCKS)
                 {
                     g_iExplodeTankRocks[g_iRockCount] = EntIndexToEntRef(entity);
                     g_iRockCount++;
-                    PrintToServer("[爆炸TankDEBUG] 石头创建并添加到跟踪: entity=%d, thrower=%d", entity, thrower);
+                    PrintToServer("[爆炸TankDEBUG] 石头创建并添加到跟踪: entity=%d, thrower=%d, 总数=%d", entity, thrower, g_iRockCount);
 
                     // Hook石头被破坏事件
                     SDKHook(entity, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+                    PrintToServer("[爆炸TankDEBUG] 石头Hook已设置");
+                }
+                else
+                {
+                    PrintToServer("[爆炸TankDEBUG] 石头跟踪列表已满！");
                 }
             }
+            else
+            {
+                PrintToServer("[爆炸TankDEBUG] 石头投掷者不匹配，跳过");
+            }
+        }
+        else
+        {
+            PrintToServer("[爆炸TankDEBUG] 当前爆炸Tank无效或不存在");
         }
     }
 }
