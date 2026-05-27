@@ -363,38 +363,22 @@ void ExplodeTank_CreateExplosion(float pos[3])
     float damageRadius = (explosionRange != null) ? explosionRange.FloatValue : 300.0;  // 伤害范围（读取配置）
     float visualRadius = damageRadius * 2.0;  // 视觉特效范围是伤害范围的2倍
 
-    // 第一次爆炸：增加红色粒子，减少烟雾火焰
-    for (int i = 0; i < 8; i++)
+    // 第一次爆炸：纯红色火花粒子，减少数量让烟雾更薄
+    for (int i = 0; i < 6; i++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-200.0, 200.0);
         offset[1] = GetRandomFloat(-200.0, 200.0);
-        offset[2] = GetRandomFloat(0.0, 75.0);
+        offset[2] = GetRandomFloat(0.0, 50.0);  // 降低高度，更多水平散开
 
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
 
-        // 重点：增加红色火花粒子
+        // 只使用1个红色火花粒子，减少烟雾密度
         ShowParticle(adjustedPos, "gas_explosion_sparks_01");
-        ShowParticle(adjustedPos, "gas_explosion_sparks_01");  // 双倍红色粒子
-
-        // 少量烟雾和火焰
-        ShowParticle(adjustedPos, "gas_explosion_smoke");
     }
 
-    // 减少爆炸道具
-    for (int i = 0; i < 2; i++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-150.0, 150.0);
-        offset[1] = GetRandomFloat(-150.0, 150.0);
-        offset[2] = GetRandomFloat(0.0, 50.0);
-
-        float adjustedPos[3];
-        AddVectors(pos, offset, adjustedPos);
-
-        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
-    }
+    // 不使用物理爆炸道具（避免金色火焰）
 
     PrintToServer("[爆炸TankDEBUG] 已创建第一次爆炸");
 
