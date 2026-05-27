@@ -95,9 +95,7 @@ void VajraTank_ClearEffects(int tank)
         VajraTank_RemoveShield();
     }
 
-    // 重置Tank颜色
-    SetEntityRenderMode(tank, RENDER_NORMAL);
-    SetEntityRenderColor(tank, 255, 255, 255, 255);
+    // 不重置颜色，让Tank尸体保留皮肤颜色
 }
 
 // 移除金刚Tank防护罩

@@ -29,12 +29,13 @@ void ExplodeTank_Apply(int tank)
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 255, 0, 0, 255);
 
-    // Hook所有实体输出事件（独立Hook）
-    HookEntityOutput("tank_rock", "OnKilled", Hook_ExplodeTankRockKilled);
-    HookEntityOutput("tank_rock", "OnBreak", Hook_ExplodeTankRockKilled);
-    HookEntityOutput("prop_physics", "OnBreak", Hook_ExplodeTankRockKilled);
+    // Hook所有可能的相关实体事件
+    HookEntityOutput("tank_rock", "OnBreak", Hook_TankRockBreak);
+    HookEntityOutput("tank_rock", "OnKilled", Hook_TankRockBreak);
+    HookEntityOutput("prop_physics", "OnBreak", Hook_TankRockBreak);
+    HookEntityOutput("prop_physics", "OnHealthChanged", Hook_TankRockHealthChange);
 
-    PrintToServer("[爆炸TankDEBUG] 已Hook石头事件");
+    PrintToServer("[爆炸TankDEBUG] 已Hook所有石头相关事件");
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -52,32 +53,63 @@ void ExplodeTank_Apply(int tank)
 // 清理爆炸Tank效果
 void ExplodeTank_ClearEffects(int tank)
 {
-    // 重置Tank颜色
-    SetEntityRenderMode(tank, RENDER_NORMAL);
-    SetEntityRenderColor(tank, 255, 255, 255, 255);
+    // 不重置颜色，让Tank尸体保留皮肤颜色
 }
 
-// Tank石头被杀死/破坏时的处理
-void Hook_ExplodeTankRockKilled(const char[] output, int caller, int activator, float delay)
+// 监听石头血量变化（提前检测石头即将被破坏）
+void Hook_TankRockHealthChange(const char[] output, int caller, int activator, float delay)
 {
-    PrintToServer("[爆炸TankDEBUG] 石头事件触发: output=%s, caller=%d", output, caller);
+    PrintToServer("[爆炸TankDEBUG] 石头血量变化: output=%s, caller=%d", output, caller);
 
     if (caller <= 0 || !IsValidEntity(caller))
         return;
 
-    // 获取实体类名
-    char className[64];
-    GetEntityClassname(caller, className, sizeof(className));
-
-    // 获取模型名称
+    // 检查是否是石头
     char modelName[128];
     GetEntPropString(caller, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
 
-    // 检查是否是石头模型
-    if (StrContains(modelName, "rock", false) == -1 && StrContains(className, "tank_rock", false) == -1)
+    if (StrContains(modelName, "rock", false) != -1)
+    {
+        PrintToServer("[爆炸TankDEBUG] 检测到石头血量变化，准备爆炸");
+
+        // 获取位置
+        float pos[3];
+        GetEntPropVector(caller, Prop_Send, "m_vecOrigin", pos);
+
+        // 直接触发爆炸（不等石头完全破碎）
+        TriggerRockExplosion(pos, modelName);
+    }
+}
+
+// 监听石头破碎事件
+void Hook_TankRockBreak(const char[] output, int caller, int activator, float delay)
+{
+    PrintToServer("[爆炸TankDEBUG] 石头破碎事件: output=%s, caller=%d", output, caller);
+
+    if (caller <= 0 || !IsValidEntity(caller))
         return;
 
-    PrintToChatAll("[爆炸Tank] 检测到Tank石头破碎!");
+    // 检查是否是石头
+    char modelName[128];
+    GetEntPropString(caller, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+
+    if (StrContains(modelName, "rock", false) != -1)
+    {
+        // 获取位置
+        float pos[3];
+        GetEntPropVector(caller, Prop_Send, "m_vecOrigin", pos);
+
+        PrintToChatAll("[爆炸Tank] 石头破碎! 触发爆炸");
+
+        // 触发爆炸
+        TriggerRockExplosion(pos, modelName);
+    }
+}
+
+// 触发石头爆炸
+void TriggerRockExplosion(float pos[3], const char[] modelName)
+{
+    PrintToServer("[爆炸TankDEBUG] 触发石头爆炸: pos=(%.1f,%.1f,%.1f), model=%s", pos[0], pos[1], pos[2], modelName);
 
     // 爆炸概率检查
     ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
@@ -89,14 +121,10 @@ void Hook_ExplodeTankRockKilled(const char[] output, int caller, int activator, 
         return;
     }
 
-    // 获取当前位置
-    float pos[3];
-    GetEntPropVector(caller, Prop_Send, "m_vecOrigin", pos);
-
-    PrintToChatAll("[爆炸Tank] 创建爆炸! 位置: %.1f, %.1f, %.1f", pos[0], pos[1], pos[2]);
+    PrintToChatAll("[爆炸Tank] 石头爆炸!");
 
     // 创建第一次爆炸
-    ExplodeTank_CreateExplosion(pos, 1.5);
+    ExplodeTank_CreateExplosion(pos, 1.3);
 
     // 存储位置用于第二次爆炸
     g_fExplodeExplosionPos[0] = pos[0];
@@ -109,17 +137,44 @@ void Hook_ExplodeTankRockKilled(const char[] output, int caller, int activator, 
 
 public Action Timer_ExplodeTankSecondExplosion(Handle timer)
 {
-    ExplodeTank_CreateExplosion(g_fExplodeExplosionPos, 1.8);
-    PrintToChatAll("[爆炸Tank] 第二次爆炸触发!");
+    ExplodeTank_CreateExplosion(g_fExplodeExplosionPos, 1.6);
+    PrintToChatAll("[爆炸Tank] 石头第二次爆炸!");
     return Plugin_Stop;
 }
 
-// 创建爆炸效果（独立函数）
+// 创建爆炸效果（独立函数）- 煤气罐爆炸风格
 void ExplodeTank_CreateExplosion(float pos[3], float scale)
 {
-    PrintToServer("[爆炸TankDEBUG] 开始创建爆炸效果，scale=%.1f", scale);
+    PrintToServer("[爆炸TankDEBUG] 创建爆炸: scale=%.1f, pos=(%.1f,%.1f,%.1f)", scale, pos[0], pos[1], pos[2]);
 
-    // 创建爆炸粒子效果
+    // 1. 创建env_explosion实体（煤气罐爆炸的核心效果）
+    int explosion = CreateEntityByName("env_explosion");
+    if (explosion != -1)
+    {
+        // 设置爆炸位置
+        TeleportEntity(explosion, pos, NULL_VECTOR, NULL_VECTOR);
+
+        // 设置爆炸属性
+        DispatchKeyValue(explosion, "iMagnitude", "150");  // 爆炸威力
+        DispatchKeyValue(explosion, "iRadiusOverride", "400");  // 爆炸半径
+        DispatchKeyValue(explosion, "fireballsprite", "sprites/zerogxplode.spr");  // 火球精灵
+
+        // 添加爆炸标志
+        SetEntProp(explosion, Prop_Data, "m_spawnflags", 8);  // 8 = 产生烟雾和火焰
+
+        DispatchSpawn(explosion);
+        ActivateEntity(explosion);
+
+        // 触发爆炸
+        AcceptEntityInput(explosion, "Explode");
+
+        // 延迟移除
+        AcceptEntityInput(explosion, "Kill");
+
+        PrintToServer("[爆炸TankDEBUG] env_explosion创建成功");
+    }
+
+    // 2. 创建爆炸粒子效果（gas_explosion - 煤气罐爆炸效果）
     int particle = CreateEntityByName("info_particle_system");
     if (particle != -1)
     {
@@ -129,18 +184,35 @@ void ExplodeTank_CreateExplosion(float pos[3], float scale)
         ActivateEntity(particle);
 
         AcceptEntityInput(particle, "Start");
-        CreateTimer(0.5, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
+        CreateTimer(0.8, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
 
-        PrintToServer("[爆炸TankDEBUG] 粒子系统已创建: ent=%d", particle);
+        PrintToServer("[爆炸TankDEBUG] 粒子系统创建成功");
     }
-    else
+
+    // 3. 创建火焰粒子效果
+    int fireParticle = CreateEntityByName("info_particle_system");
+    if (fireParticle != -1)
     {
-        PrintToServer("[爆炸TankDEBUG] 粒子系统创建失败!");
+        TeleportEntity(fireParticle, pos, NULL_VECTOR, NULL_VECTOR);
+        DispatchKeyValue(fireParticle, "effect_name", "fire_large_01");
+        DispatchSpawn(fireParticle);
+        ActivateEntity(fireParticle);
+
+        AcceptEntityInput(fireParticle, "Start");
+        CreateTimer(1.0, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(fireParticle), TIMER_FLAG_NO_MAPCHANGE);
+
+        PrintToServer("[爆炸TankDEBUG] 火焰粒子创建成功");
     }
 
-    // 造成爆炸伤害
+    // 4. 播放爆炸音效
+    char soundPath[] = "weapons/hegrenade/explode3.wav";
+    PrecacheSound(soundPath, true);
+    EmitAmbientSound(soundPath, pos, SNDLEVEL_NORMAL, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
+
+    // 5. 造成爆炸伤害
     ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
     int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
+    float explosionRadius = 400.0 * scale;  // 增大爆炸范围到400
 
     // 对范围内的玩家造成伤害
     int hitCount = 0;
@@ -152,17 +224,16 @@ void ExplodeTank_CreateExplosion(float pos[3], float scale)
             GetClientAbsOrigin(i, playerPos);
 
             float distance = GetVectorDistance(pos, playerPos, false);
-            if (distance < 300.0 * scale)
+            if (distance < explosionRadius)
             {
-                float actualDamage = damage * (1.0 - (distance / (300.0 * scale)));
+                float actualDamage = damage * (1.0 - (distance / explosionRadius));
                 SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
                 hitCount++;
-                PrintToServer("[爆炸TankDEBUG] 命中玩家%d: 伤害=%.1f, 距离=%.1f", i, actualDamage, distance);
             }
         }
     }
 
-    PrintToChatAll("[爆炸Tank] 爆炸完成! 伤害=%d, 命中=%d人", damage, hitCount);
+    PrintToChatAll("[爆炸Tank] 石头爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
 }
 
 public Action Timer_ExplodeTankRemoveParticle(Handle timer, int particleRef)
@@ -182,5 +253,6 @@ void ExplodeTank_OnDeath(int tank)
     if (currentExplodeTank == tank)
     {
         g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
+        PrintToServer("[爆炸TankDEBUG] 爆炸Tank死亡，清理引用");
     }
 }

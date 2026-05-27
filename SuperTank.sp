@@ -256,9 +256,24 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     if (client <= 0 || client > MaxClients || !IsClientInGame(client))
         return;
 
+    // 检查是否是Tank
+    int zClass = GetEntProp(client, Prop_Send, "m_zombieClass");
+    if (zClass != 8)
+        return;
+
+    // 重置所有Tank效果和颜色
+    ResetAllTankEffects(client);
+
     // 调用各模块的死亡处理
     VajraTank_OnDeath(client);
     ExplodeTank_OnDeath(client);
+}
+
+// 重置所有Tank效果（不重置颜色）
+void ResetAllTankEffects(int tank)
+{
+    // 只重置防护罩等其他效果，保留颜色
+    // 颜色会随Tank尸体保留
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
