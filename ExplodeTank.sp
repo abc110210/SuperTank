@@ -13,20 +13,32 @@ static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
 bool ExplodeTank_IsTankRock(int inflictor)
 {
     if (inflictor <= 0 || !IsValidEntity(inflictor))
+    {
+        PrintToServer("[爆炸TankDEBUG] 石头检测: inflictor无效");
         return false;
+    }
 
     char classname[64];
     GetEntityClassname(inflictor, classname, sizeof(classname));
+
+    PrintToServer("[爆炸TankDEBUG] 石头检测: classname=%s", classname);
 
     if (!StrEqual(classname, "tank_rock", false))
         return false;
 
     // 检查是否是爆炸Tank投掷的
     int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+    PrintToServer("[爆炸TankDEBUG] 当前爆炸Tank=%d, 检查有效性", currentTank);
+
     if (currentTank <= 0 || !IsValidEntity(currentTank))
+    {
+        PrintToServer("[爆炸TankDEBUG] 没有爆炸Tank存在");
         return false;
+    }
 
     int thrower = GetEntPropEnt(inflictor, Prop_Data, "m_hThrower");
+    PrintToServer("[爆炸TankDEBUG] 石头投掷者=%d, 爆炸Tank=%d, 匹配=%d", thrower, currentTank, (thrower == currentTank));
+
     return (thrower == currentTank);
 }
 
@@ -55,12 +67,16 @@ void ExplodeTank_Apply(int tank)
         return;
     }
 
+    PrintToServer("[爆炸TankDEBUG] 应用爆炸Tank: tank=%d, userid=%d", tank, GetClientUserId(tank));
+
     // 标记为爆炸Tank
     g_iThisExplodeTankEntRef = EntIndexToEntRef(tank);
 
     // 设置红色皮肤
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 255, 0, 0, 255);
+
+    PrintToServer("[爆炸TankDEBUG] 已设置红色皮肤");
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -72,6 +88,8 @@ void ExplodeTank_Apply(int tank)
     SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
     SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
+    PrintToServer("[爆炸TankDEBUG] 设置血量: %d (玩家数=%d, 每人血量=%d)", finalHP, playerCount, hpPerPlayer);
+
     PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x02爆炸Tank \x01已出现!");
 }
 
@@ -80,11 +98,14 @@ void ExplodeTank_Apply(int tank)
 // 触发石头爆炸（在SuperTank.sp中调用）
 void TriggerRockExplosion(float pos[3])
 {
-    PrintToServer("[爆炸TankDEBUG] 触发石头爆炸: pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
+    PrintToServer("[爆炸TankDEBUG] ========== 触发石头爆炸 ==========");
+    PrintToServer("[爆炸TankDEBUG] pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
 
     // 爆炸概率检查
     ConVar explosionRandom = FindConVar("shan_ExplodeTank_explosion_random");
     int explosionChance = (explosionRandom != null) ? explosionRandom.IntValue : 100;
+
+    PrintToServer("[爆炸TankDEBUG] 爆炸概率检查: 随机数=%d, 需求=%d", GetRandomInt(1, 100), explosionChance);
 
     if (GetRandomInt(1, 100) > explosionChance)
     {

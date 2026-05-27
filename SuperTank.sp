@@ -39,27 +39,31 @@ public void OnPluginStart()
 {
     // 金刚Tank配置
     g_cvarVajraEnabled = CreateConVar("shan_vajra_enabled", "1", "启用金刚Tank (0=禁用, 1=启用)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 1.0);
-    CreateConVar("shan_Vajra_reflect_damage", "10", "金刚Tank反弹伤害基数 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
+    CreateConVar("shan_Vajra_odds", "10", "金刚Tank生成概率 (0-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 100.0);
+    CreateConVar("shan_Vajra_reflect", "10", "金刚Tank反弹概率 (0-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 100.0);
+    CreateConVar("shan_Vajra_reflect_damage", "3", "金刚Tank反弹伤害基数 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
 
     // 爆炸Tank配置
+    CreateConVar("shan_ExplodeTank_odds", "90", "爆炸Tank生成概率 (0-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 100.0);
     CreateConVar("shan_ExplodeTank_explosion_damage", "50", "爆炸Tank爆炸伤害 (0-500)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 500.0);
     CreateConVar("shan_ExplodeTank_explosion_random", "100", "爆炸Tank爆炸概率 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
 
     // 全局Tank配置
+    CreateConVar("shan_tank_hp", "4000", "Tank动态生命值 (每名玩家增加的血量)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 10000.0);
     g_cvarTankDamage = CreateConVar("shan_tank_damage", "24", "Tank拳头伤害值 (1-1000)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 1000.0);
+
+    // 自动生成配置文件
+    AutoExecConfig(true, "SuperTank");
 
     // 注册命令
     RegConsoleCmd("sm_supertank", Command_SuperTank, "打开SuperTank菜单");
+    RegConsoleCmd("sm_tankconfig", Command_TankConfig, "显示Tank配置信息");
 
     // Hook事件
     HookEvent("player_death", Event_PlayerDeath);
     HookEvent("round_end", Event_RoundEnd);
     HookEvent("tank_spawn", Event_TankSpawn);
     HookEvent("player_spawn", Event_PlayerSpawn);
-
-    // 尝试多个可能的配置文件路径
-    ServerCommand("exec sourcemod/SuperTank");
-    ServerCommand("exec SuperTank");
 }
 
 public void OnMapStart()
@@ -78,20 +82,25 @@ public void OnConfigsExecuted()
 public void OnClientPutInServer(int client)
 {
     // Hook所有玩家的伤害事件（用于检测Tank伤害）
-    if (IsClientInGame(client))
-    {
-        SDKHook(client, SDKHook_OnTakeDamage, Hook_TankDamageOutput);
-    }
+    // 注意：在OnClientPutInServer时，客户端可能还未完全进入游戏，所以直接Hook
+    SDKHook(client, SDKHook_OnTakeDamage, Hook_TankDamageOutput);
+    PrintToServer("[HookDEBUG] 已Hook客户端 %d 的伤害事件", client);
 }
 
 // 石头爆炸检测（在OnTakeDamage中调用）
 void CheckExplodeTankRock(int victim, int inflictor, float damage)
 {
+    PrintToServer("[爆炸TankDEBUG] ========== 石头检测开始 ==========");
+    PrintToServer("[爆炸TankDEBUG] victim=%d, inflictor=%d, damage=%.1f", victim, inflictor, damage);
+
     // 检查是否是爆炸Tank的石头
     if (!ExplodeTank_IsTankRock(inflictor))
+    {
+        PrintToServer("[爆炸TankDEBUG] 不是爆炸Tank的石头");
         return;
+    }
 
-    PrintToServer("[爆炸TankDEBUG] 爆炸Tank的石头造成伤害: victim=%d, damage=%.1f", victim, damage);
+    PrintToServer("[爆炸TankDEBUG] 确认是爆炸Tank的石头!");
 
     // 检查是否打中幸存者
     if (victim > 0 && victim <= MaxClients && IsClientInGame(victim) && IsPlayerAlive(victim) && GetClientTeam(victim) == 2)
@@ -105,9 +114,55 @@ void CheckExplodeTankRock(int victim, int inflictor, float damage)
         // 触发爆炸
         TriggerRockExplosion(rockPos);
     }
+    else
+    {
+        PrintToServer("[爆炸TankDEBUG] 受害者不是幸存者");
+    }
 }
 
 // ==================== 菜单系统 ====================
+
+public Action Command_TankConfig(int client, int args)
+{
+    if (client == 0)
+    {
+        ReplyToCommand(client, "[寄寄之家 - SuperTank] 此命令只能由玩家使用");
+        return Plugin_Handled;
+    }
+
+    if (!IsClientInGame(client))
+        return Plugin_Handled;
+
+    // 获取配置值
+    ConVar cvarTankHP = FindConVar("shan_tank_hp");
+    ConVar cvarTankDamage = FindConVar("shan_tank_damage");
+    ConVar cvarVajraOdds = FindConVar("shan_Vajra_odds");
+    ConVar cvarVajraReflect = FindConVar("shan_Vajra_reflect");
+    ConVar cvarVajraReflectDamage = FindConVar("shan_Vajra_reflect_damage");
+    ConVar cvarExplodeOdds = FindConVar("shan_ExplodeTank_odds");
+    ConVar cvarExplodeRandom = FindConVar("shan_ExplodeTank_explosion_random");
+    ConVar cvarExplodeDamage = FindConVar("shan_ExplodeTank_explosion_damage");
+
+    // 计算当前难度基础血量
+    int baseHP = GetDifficultyTankHP();
+    int playerCount = GetOnlineSurvivorCount();
+    int tankHPPerPlayer = (cvarTankHP != null) ? cvarTankHP.IntValue : 4000;
+    int totalHP = baseHP + (tankHPPerPlayer * playerCount);
+
+    // 显示配置信息
+    PrintToChat(client, "\x01========== \x03[寄寄之家 - SuperTank]\x01 ==========");
+    PrintToChat(client, "\x01Tank血量: \x04%d \x01(基础: %d + 玩家: %d × %d)", totalHP, baseHP, playerCount, tankHPPerPlayer);
+    PrintToChat(client, "\x01Tank伤害: \x04%d", (cvarTankDamage != null) ? cvarTankDamage.IntValue : 24);
+    PrintToChat(client, "\x01金刚Tank生成概率: \x04%d%%", (cvarVajraOdds != null) ? cvarVajraOdds.IntValue : 10);
+    PrintToChat(client, "\x01金刚Tank反弹概率: \x04%d%%", (cvarVajraReflect != null) ? cvarVajraReflect.IntValue : 10);
+    PrintToChat(client, "\x01金刚Tank反伤随机值: \x04%d ~ %d", (cvarVajraReflectDamage != null) ? cvarVajraReflectDamage.IntValue : 3, (cvarVajraReflectDamage != null) ? cvarVajraReflectDamage.IntValue * 2 : 6);
+    PrintToChat(client, "\x01爆炸Tank生成概率: \x04%d%%", (cvarExplodeOdds != null) ? cvarExplodeOdds.IntValue : 90);
+    PrintToChat(client, "\x01爆炸Tank爆炸概率: \x04%d%%", (cvarExplodeRandom != null) ? cvarExplodeRandom.IntValue : 100);
+    PrintToChat(client, "\x01爆炸Tank爆炸伤害: \x04%d", (cvarExplodeDamage != null) ? cvarExplodeDamage.IntValue : 50);
+    PrintToChat(client, "\x01====================================");
+
+    return Plugin_Handled;
+}
 
 public Action Command_SuperTank(int client, int args)
 {
@@ -223,6 +278,8 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     if (tank <= 0 || !IsClientInGame(tank))
         return;
 
+    PrintToServer("[TankSpawnDEBUG] Tank生成: tank=%d, userid=%d, name=%N", tank, event.GetInt("userid"), tank);
+
     // 随机选择Tank类型 (0-100)
     int random = GetRandomInt(1, 100);
 
@@ -234,14 +291,22 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     ConVar explodeOdds = FindConVar("shan_ExplodeTank_odds");
     int explodeOddsValue = (explodeOdds != null) ? explodeOdds.IntValue : 30;
 
+    PrintToServer("[TankSpawnDEBUG] 随机数=%d, 金刚概率=%d, 爆炸概率=%d", random, vajraOddsValue, explodeOddsValue);
+
     // 根据概率选择Tank类型
     if (random <= vajraOddsValue)
     {
+        PrintToServer("[TankSpawnDEBUG] 选择金刚Tank");
         VajraTank_Apply(tank);
     }
     else if (random <= vajraOddsValue + explodeOddsValue)
     {
+        PrintToServer("[TankSpawnDEBUG] 选择爆炸Tank");
         ExplodeTank_Apply(tank);
+    }
+    else
+    {
+        PrintToServer("[TankSpawnDEBUG] 选择普通Tank");
     }
     // 剩余概率为普通Tank
 }
@@ -258,12 +323,27 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
     if (GetClientTeam(client) == 2)
     {
         SDKHook(client, SDKHook_OnTakeDamage, Hook_TankDamageOutput);
+        PrintToServer("[HookDEBUG] 幸存者 %N 生成，已Hook伤害事件", client);
     }
 }
 
 // Tank输出伤害统一处理
 public Action Hook_TankDamageOutput(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
+    // 调试：输出所有伤害事件
+    if (inflictor > 0 && IsValidEntity(inflictor))
+    {
+        char classname[64];
+        GetEntityClassname(inflictor, classname, sizeof(classname));
+        if (StrEqual(classname, "tank_rock", false))
+        {
+            PrintToServer("[伤害HookDEBUG] 石头伤害: victim=%d, attacker=%d, inflictor=%d, damage=%.1f", victim, attacker, inflictor, damage);
+        }
+    }
+
+    // 优先检查是否是爆炸Tank的石头伤害（石头伤害的attacker可能不是Tank）
+    CheckExplodeTankRock(victim, inflictor, damage);
+
     // 检查攻击者是否是Tank
     if (attacker <= 0 || attacker > MaxClients || !IsClientInGame(attacker))
         return Plugin_Continue;
@@ -271,9 +351,6 @@ public Action Hook_TankDamageOutput(int victim, int &attacker, int &inflictor, f
     int zClass = GetEntProp(attacker, Prop_Send, "m_zombieClass");
     if (zClass != 8)
         return Plugin_Continue;
-
-    // 检查是否是爆炸Tank的石头伤害
-    CheckExplodeTankRock(victim, inflictor, damage);
 
     // 应用全局Tank伤害值
     if (g_cvarTankDamage != null)
