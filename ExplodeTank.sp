@@ -357,22 +357,8 @@ void ExplodeTank_CreateExplosion(float pos[3])
     float damageRadius = 500.0;      // 伤害范围
     float visualRadius = 1200.0;     // 视觉特效范围
 
-    // 第一次爆炸：使用榴弹炮粒子特效（扩大范围到1200）
-    for (int i = 0; i < 8; i++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-600.0, 600.0);
-        offset[1] = GetRandomFloat(-600.0, 600.0);
-        offset[2] = GetRandomFloat(0.0, 200.0);
-
-        float adjustedPos[3];
-        AddVectors(pos, offset, adjustedPos);
-
-        ShowParticle(adjustedPos, "weapon_grenade_explosion");
-    }
-
-    // 创建少量爆炸道具增强视觉冲击（扩大范围）
-    for (int i = 0; i < 4; i++)
+    // 第一次爆炸：复刻原版榴弹炮效果
+    for (int i = 0; i < 6; i++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-400.0, 400.0);
@@ -382,6 +368,25 @@ void ExplodeTank_CreateExplosion(float pos[3])
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
 
+        // 组合所有榴弹炮爆炸粒子特效
+        ShowParticle(adjustedPos, "gas_explosion_initialburst");  // 瞬间强光
+        ShowParticle(adjustedPos, "gas_explosion_sparks_01");      // 飞溅火花+拖尾
+        ShowParticle(adjustedPos, "gas_explosion_smoke");          // 烟雾
+        ShowParticle(adjustedPos, "gas_explosion_fireball");       // 小火核
+    }
+
+    // 创建爆炸道具增强视觉效果
+    for (int i = 0; i < 8; i++)
+    {
+        float offset[3];
+        offset[0] = GetRandomFloat(-400.0, 400.0);
+        offset[1] = GetRandomFloat(-400.0, 400.0);
+        offset[2] = GetRandomFloat(0.0, 150.0);
+
+        float adjustedPos[3];
+        AddVectors(pos, offset, adjustedPos);
+
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
         ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
     }
 
@@ -389,9 +394,6 @@ void ExplodeTank_CreateExplosion(float pos[3])
 
     // 第二次爆炸：延迟1秒后在周围爆炸
     CreateTimer(1.0, Timer_SecondaryExplosion, .flags = TIMER_FLAG_NO_MAPCHANGE);
-
-    // 第三次爆炸：延迟1.5秒在更外围爆炸
-    CreateTimer(1.5, Timer_TertiaryExplosion, .flags = TIMER_FLAG_NO_MAPCHANGE);
 
     // 播放第一层爆炸音效（低频冲击）
     char soundPath1[] = "weapons/hegrenade/explode5.wav";
@@ -448,6 +450,11 @@ void ShowParticle(float pos[3], char[] particleName)
     {
         TeleportEntity(particle, pos, NULL_VECTOR, NULL_VECTOR);
         SetEntPropString(particle, Prop_Data, "m_iszEffectName", particleName);
+
+        // 设置粒子系统属性
+        SetEntProp(particle, Prop_Data, "m_nSnapshotIndex", 1);
+        SetEntPropEnt(particle, Prop_Data, "m_hOwnerEntity", 0);
+
         DispatchSpawn(particle);
         ActivateEntity(particle);
         AcceptEntityInput(particle, "Start");
@@ -469,24 +476,44 @@ public Action Timer_DeleteParticle(Handle timer, int particleRef)
     return Plugin_Stop;
 }
 
-// 第二次爆炸（在第一次爆炸周围）
+// 第二次爆炸（在第一次爆炸周围 - 增强版）
 public Action Timer_SecondaryExplosion(Handle timer)
 {
     if (!g_bHasLastExplosionPos)
         return Plugin_Stop;
 
-    // 使用保存的爆炸位置创建二次爆炸（扩大到1200范围）
-    for (int j = 0; j < 6; j++)
+    // 创建大量粒子特效（增强华丽程度）
+    for (int j = 0; j < 12; j++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-600.0, 600.0);
         offset[1] = GetRandomFloat(-600.0, 600.0);
+        offset[2] = GetRandomFloat(0.0, 300.0);
+
+        float adjustedPos[3];
+        AddVectors(g_fLastExplosionPos, offset, adjustedPos);
+
+        // 组合所有榴弹炮爆炸粒子特效
+        ShowParticle(adjustedPos, "gas_explosion_initialburst");  // 瞬间强光
+        ShowParticle(adjustedPos, "gas_explosion_sparks_01");      // 飞溅火花+拖尾
+        ShowParticle(adjustedPos, "gas_explosion_smoke");          // 烟雾
+        ShowParticle(adjustedPos, "gas_explosion_fireball");       // 小火核
+    }
+
+    // 创建大量爆炸道具（增强视觉效果）
+    for (int j = 0; j < 12; j++)
+    {
+        float offset[3];
+        offset[0] = GetRandomFloat(-500.0, 500.0);
+        offset[1] = GetRandomFloat(-500.0, 500.0);
         offset[2] = GetRandomFloat(0.0, 200.0);
 
         float adjustedPos[3];
         AddVectors(g_fLastExplosionPos, offset, adjustedPos);
 
-        ShowParticle(adjustedPos, "weapon_grenade_explosion");
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
     }
 
     // 播放二次爆炸音效（组合）
@@ -498,40 +525,7 @@ public Action Timer_SecondaryExplosion(Handle timer)
     PrecacheSound(soundPath2, true);
     EmitAmbientSound(soundPath2, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
 
-    PrintToServer("[爆炸TankDEBUG] 已创建第二次爆炸");
-    return Plugin_Stop;
-}
-
-// 第三次爆炸（更外围）
-public Action Timer_TertiaryExplosion(Handle timer)
-{
-    if (!g_bHasLastExplosionPos)
-        return Plugin_Stop;
-
-    // 在更外围创建三次爆炸（扩大到1200范围）
-    for (int j = 0; j < 4; j++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-600.0, 600.0);
-        offset[1] = GetRandomFloat(-600.0, 600.0);
-        offset[2] = GetRandomFloat(0.0, 200.0);
-
-        float adjustedPos[3];
-        AddVectors(g_fLastExplosionPos, offset, adjustedPos);
-
-        ShowParticle(adjustedPos, "weapon_grenade_explosion");
-    }
-
-    // 播放三次爆炸音效（组合）
-    char soundPath[] = "weapons/hegrenade/explode5.wav";
-    PrecacheSound(soundPath, true);
-    EmitAmbientSound(soundPath, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-    char soundPath2[] = "ambient/explosions/explode_2.wav";
-    PrecacheSound(soundPath2, true);
-    EmitAmbientSound(soundPath2, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-    PrintToServer("[爆炸TankDEBUG] 已创建第三次爆炸");
+    PrintToServer("[爆炸TankDEBUG] 已创建第二次爆炸（增强版）");
     return Plugin_Stop;
 }
 

@@ -91,6 +91,9 @@ public void OnMapStart()
 
     // 预缓存爆炸精灵文件
     PrecacheGeneric("sprites/zerogxplode.spr", true);
+
+    // 预缓存榴弹炮粒子特效文件（environmental_fx.pcf）
+    PrecacheGeneric("particles/environmental_fx.pcf", true);
 }
 
 // 监听实体创建（用于石头跟踪）
