@@ -91,9 +91,13 @@ void ExplodeTank_ClearRockList()
 // 为石头添加榴弹炮轨迹特效
 void ExplodeTank_AddRockTrail(int rock, int rockIndex)
 {
+    // 增加石头血量，防止被点燃快速摧毁
+    SetEntProp(rock, Prop_Data, "m_iHealth", 1000);
+    SetEntProp(rock, Prop_Data, "m_iMaxHealth", 1000);
+
     // 点燃石头产生火焰烟雾轨迹（和mutant_tanks的meteor一样）
     AcceptEntityInput(rock, "Ignite");
-    PrintToServer("[爆炸TankDEBUG] 已点燃石头添加轨迹特效: rock=%d", rock);
+    PrintToServer("[爆炸TankDEBUG] 已点燃石头添加轨迹特效: rock=%d, 血量=1000", rock);
 }
 
 // 清理指定的石头跟踪（供SuperTank.sp调用）
@@ -354,8 +358,10 @@ void ExplodeTank_CreateExplosion(float pos[3])
     ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
     int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
 
-    float damageRadius = 250.0;      // 伤害范围（一半）
-    float visualRadius = 600.0;      // 视觉特效范围（一半）
+    // 获取配置的爆炸范围
+    ConVar explosionRange = FindConVar("shan_ExplodeTank_explosion_range");
+    float damageRadius = (explosionRange != null) ? explosionRange.FloatValue : 300.0;  // 伤害范围（读取配置）
+    float visualRadius = damageRadius * 2.0;  // 视觉特效范围是伤害范围的2倍
 
     // 第一次爆炸：组合榴弹炮爆炸粒子（范围减半）
     for (int i = 0; i < 8; i++)
@@ -392,9 +398,6 @@ void ExplodeTank_CreateExplosion(float pos[3])
 
     PrintToServer("[爆炸TankDEBUG] 已创建第一次爆炸");
 
-    // 第二次爆炸：延迟1秒后在周围爆炸
-    CreateTimer(1.0, Timer_SecondaryExplosion, .flags = TIMER_FLAG_NO_MAPCHANGE);
-
     // 播放第一层爆炸音效（低频冲击）
     char soundPath1[] = "weapons/hegrenade/explode5.wav";
     PrecacheSound(soundPath1, true);
@@ -405,8 +408,8 @@ void ExplodeTank_CreateExplosion(float pos[3])
     PrecacheSound(soundPath2, true);
     EmitAmbientSound(soundPath2, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
 
-    // 屏幕震动（固定300范围，一半）
-    ShakeScreen(pos, 300.0);
+    // 屏幕震动（使用配置的爆炸范围）
+    ShakeScreen(pos, damageRadius);
 
     // 击退幸存者并造成伤害（使用伤害范围）
     int hitCount = 0;
@@ -478,43 +481,6 @@ public Action Timer_DeleteParticle(Handle timer, int particleRef)
     {
         AcceptEntityInput(particle, "Kill");
     }
-    return Plugin_Stop;
-}
-
-// 第二次爆炸（在第一次爆炸周围 - 增强版）
-public Action Timer_SecondaryExplosion(Handle timer)
-{
-    if (!g_bHasLastExplosionPos)
-        return Plugin_Stop;
-
-    // 创建大量爆炸粒子（复刻榴弹炮效果，范围减半）
-    for (int j = 0; j < 15; j++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-300.0, 300.0);
-        offset[1] = GetRandomFloat(-300.0, 300.0);
-        offset[2] = GetRandomFloat(0.0, 150.0);
-
-        float adjustedPos[3];
-        AddVectors(g_fLastExplosionPos, offset, adjustedPos);
-
-        // 组合榴弹炮爆炸效果
-        ShowParticle(adjustedPos, "gas_explosion_initialburst");
-        ShowParticle(adjustedPos, "gas_explosion_sparks_01");
-        ShowParticle(adjustedPos, "gas_explosion_smoke");
-        ShowParticle(adjustedPos, "gas_explosion_fireball");
-    }
-
-    // 播放二次爆炸音效（组合）
-    char soundPath[] = "weapons/hegrenade/explode5.wav";
-    PrecacheSound(soundPath, true);
-    EmitAmbientSound(soundPath, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-    char soundPath2[] = "ambient/explosions/explode_2.wav";
-    PrecacheSound(soundPath2, true);
-    EmitAmbientSound(soundPath2, g_fLastExplosionPos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-    PrintToServer("[爆炸TankDEBUG] 已创建第二次爆炸（增强版）");
     return Plugin_Stop;
 }
 

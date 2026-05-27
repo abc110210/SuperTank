@@ -61,6 +61,7 @@ public void OnPluginStart()
     CreateConVar("shan_ExplodeTank_odds", "90", "爆炸Tank生成概率 (0-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 100.0);
     CreateConVar("shan_ExplodeTank_explosion_damage", "50", "爆炸Tank爆炸伤害 (0-500)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 500.0);
     CreateConVar("shan_ExplodeTank_explosion_random", "100", "爆炸Tank爆炸概率 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
+    CreateConVar("shan_ExplodeTank_explosion_range", "300", "爆炸Tank爆炸范围 (100-1000)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 100.0, true, 1000.0);
 
     // 全局Tank配置
     CreateConVar("shan_tank_hp", "4000", "Tank动态生命值 (每名玩家增加的血量)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 10000.0);
@@ -230,6 +231,7 @@ public Action Command_TankConfig(int client, int args)
     ConVar cvarExplodeOdds = FindConVar("shan_ExplodeTank_odds");
     ConVar cvarExplodeRandom = FindConVar("shan_ExplodeTank_explosion_random");
     ConVar cvarExplodeDamage = FindConVar("shan_ExplodeTank_explosion_damage");
+    ConVar cvarExplodeRange = FindConVar("shan_ExplodeTank_explosion_range");
 
     // 计算当前难度基础血量
     int baseHP = GetDifficultyTankHP();
@@ -247,6 +249,7 @@ public Action Command_TankConfig(int client, int args)
     PrintToChat(client, "\x01爆炸Tank生成概率: \x04%d%%", (cvarExplodeOdds != null) ? cvarExplodeOdds.IntValue : 90);
     PrintToChat(client, "\x01爆炸Tank爆炸概率: \x04%d%%", (cvarExplodeRandom != null) ? cvarExplodeRandom.IntValue : 100);
     PrintToChat(client, "\x01爆炸Tank爆炸伤害: \x04%d", (cvarExplodeDamage != null) ? cvarExplodeDamage.IntValue : 50);
+    PrintToChat(client, "\x01爆炸Tank爆炸范围: \x04%d", (cvarExplodeRange != null) ? cvarExplodeRange.IntValue : 300);
     PrintToChat(client, "\x01====================================");
 
     return Plugin_Handled;
