@@ -454,13 +454,8 @@ void ShowParticle(float pos[3], char[] particleName)
         // 先设置位置
         TeleportEntity(particle, pos, NULL_VECTOR, NULL_VECTOR);
 
-        // 使用DispatchKeyValue设置粒子名称
-        DispatchKeyValue(particle, "effect_name", particleName);
+        // 设置粒子名称
         SetEntPropString(particle, Prop_Data, "m_iszEffectName", particleName);
-
-        // 设置粒子系统属性
-        SetEntProp(particle, Prop_Data, "m_nSnapshotIndex", 1);
-        SetEntPropEnt(particle, Prop_Data, "m_hOwnerEntity", 0);
 
         DispatchSpawn(particle);
         ActivateEntity(particle);
