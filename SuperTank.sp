@@ -29,6 +29,9 @@ ConVar g_cvarTankDamage;
 // 幸存者伤害Hook状态
 bool g_bSurvivorHooksSetup = false;
 
+// 爆炸Tank实体引用（供ExplodeTank.sp使用）
+static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
+
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
 #include "ExplodeTank.sp"
@@ -73,39 +76,54 @@ public void OnConfigsExecuted()
     PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
 }
 
-// ==================== 实体创建和销毁监听 ====================
+// ==================== 幸存者Hook设置 ====================
 
-public void OnEntityCreated(int entity, const char[] classname)
+public void OnClientPutInServer(int client)
 {
-    if (entity <= 0 || !IsValidEntity(entity))
-        return;
-
-    // 调试：记录所有实体创建
-    if (StrEqual(classname, "tank_rock", false) || StrEqual(classname, "prop_physics", false))
+    // Hook所有玩家的伤害事件（用于检测Tank伤害）
+    if (IsClientInGame(client))
     {
-        PrintToServer("[爆炸TankDEBUG] 主文件: OnEntityCreated entity=%d classname=%s", entity, classname);
+        SDKHook(client, SDKHook_OnTakeDamage, Hook_TankDamageOutput);
     }
-
-    // 调用爆炸Tank的实体创建监听
-    ExplodeTank_OnEntityCreated(entity, classname);
 }
 
-public void OnEntityDestroyed(int entity)
+// 石头爆炸检测（在OnTakeDamage中调用）
+void CheckExplodeTankRock(int victim, int inflictor, float damage)
 {
-    if (entity <= 0)
+    // 检查是否是爆炸Tank存在
+    int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+    if (currentTank <= 0 || !IsValidEntity(currentTank))
         return;
 
-    // 调试：记录所有实体销毁
+    // 检查是否是石头造成的伤害
+    if (inflictor <= 0 || !IsValidEntity(inflictor))
+        return;
+
     char classname[64];
-    GetEntityClassname(entity, classname, sizeof(classname));
+    GetEntityClassname(inflictor, classname, sizeof(classname));
 
-    if (StrEqual(classname, "tank_rock", false) || StrEqual(classname, "prop_physics", false))
+    if (!StrEqual(classname, "tank_rock", false))
+        return;
+
+    // 获取石头的投掷者
+    int thrower = GetEntPropEnt(inflictor, Prop_Data, "m_hThrower");
+    if (thrower != currentTank)
+        return;
+
+    PrintToServer("[爆炸TankDEBUG] 爆炸Tank的石头造成伤害: victim=%d, damage=%.1f", victim, damage);
+
+    // 检查是否打中幸存者
+    if (victim > 0 && victim <= MaxClients && IsClientInGame(victim) && IsPlayerAlive(victim) && GetClientTeam(victim) == 2)
     {
-        PrintToServer("[爆炸TankDEBUG] 主文件: OnEntityDestroyed entity=%d classname=%s", entity, classname);
-    }
+        // 获取石头位置
+        float rockPos[3];
+        GetEntPropVector(inflictor, Prop_Data, "m_vecOrigin", rockPos);
 
-    // 调用爆炸Tank的实体销毁监听
-    ExplodeTank_OnEntityDestroyed(entity);
+        PrintToServer("[爆炸TankDEBUG] 石头击中幸存者，触发爆炸: pos=(%.1f,%.1f,%.1f)", rockPos[0], rockPos[1], rockPos[2]);
+
+        // 触发爆炸
+        TriggerRockExplosion(rockPos);
+    }
 }
 
 // ==================== 菜单系统 ====================
@@ -272,6 +290,9 @@ public Action Hook_TankDamageOutput(int victim, int &attacker, int &inflictor, f
     int zClass = GetEntProp(attacker, Prop_Send, "m_zombieClass");
     if (zClass != 8)
         return Plugin_Continue;
+
+    // 检查是否是爆炸Tank的石头伤害
+    CheckExplodeTankRock(victim, inflictor, damage);
 
     // 应用全局Tank伤害值
     if (g_cvarTankDamage != null)
