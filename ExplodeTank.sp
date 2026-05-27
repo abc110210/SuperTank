@@ -354,22 +354,19 @@ void ExplodeTank_CreateExplosion(float pos[3])
     ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
     int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
 
-    float damageRadius = 500.0;      // 伤害范围
-    float visualRadius = 1200.0;     // 视觉特效范围
+    float damageRadius = 250.0;      // 伤害范围（一半）
+    float visualRadius = 600.0;      // 视觉特效范围（一半）
 
-    // 第一次爆炸：组合榴弹炮爆炸粒子
+    // 第一次爆炸：组合榴弹炮爆炸粒子（范围减半）
     for (int i = 0; i < 8; i++)
     {
         float offset[3];
-        offset[0] = GetRandomFloat(-400.0, 400.0);
-        offset[1] = GetRandomFloat(-400.0, 400.0);
-        offset[2] = GetRandomFloat(0.0, 150.0);
+        offset[0] = GetRandomFloat(-200.0, 200.0);
+        offset[1] = GetRandomFloat(-200.0, 200.0);
+        offset[2] = GetRandomFloat(0.0, 75.0);
 
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
-
-        // 测试：先使用简单的粒子名称
-        ShowParticle(adjustedPos, "explosion_huge");
 
         // 组合榴弹炮爆炸效果
         ShowParticle(adjustedPos, "gas_explosion_initialburst");
@@ -378,13 +375,13 @@ void ExplodeTank_CreateExplosion(float pos[3])
         ShowParticle(adjustedPos, "gas_explosion_fireball");
     }
 
-    // 添加一些物理爆炸道具作为备用
+    // 添加一些物理爆炸道具作为备用（范围减半）
     for (int i = 0; i < 4; i++)
     {
         float offset[3];
-        offset[0] = GetRandomFloat(-300.0, 300.0);
-        offset[1] = GetRandomFloat(-300.0, 300.0);
-        offset[2] = GetRandomFloat(0.0, 100.0);
+        offset[0] = GetRandomFloat(-150.0, 150.0);
+        offset[1] = GetRandomFloat(-150.0, 150.0);
+        offset[2] = GetRandomFloat(0.0, 50.0);
 
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
@@ -408,8 +405,8 @@ void ExplodeTank_CreateExplosion(float pos[3])
     PrecacheSound(soundPath2, true);
     EmitAmbientSound(soundPath2, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
 
-    // 屏幕震动（固定1200范围）
-    ShakeScreen(pos, 1200.0);
+    // 屏幕震动（固定300范围，一半）
+    ShakeScreen(pos, 300.0);
 
     // 击退幸存者并造成伤害（使用伤害范围）
     int hitCount = 0;
@@ -490,13 +487,13 @@ public Action Timer_SecondaryExplosion(Handle timer)
     if (!g_bHasLastExplosionPos)
         return Plugin_Stop;
 
-    // 创建大量爆炸粒子（复刻榴弹炮效果）
+    // 创建大量爆炸粒子（复刻榴弹炮效果，范围减半）
     for (int j = 0; j < 15; j++)
     {
         float offset[3];
-        offset[0] = GetRandomFloat(-600.0, 600.0);
-        offset[1] = GetRandomFloat(-600.0, 600.0);
-        offset[2] = GetRandomFloat(0.0, 300.0);
+        offset[0] = GetRandomFloat(-300.0, 300.0);
+        offset[1] = GetRandomFloat(-300.0, 300.0);
+        offset[2] = GetRandomFloat(0.0, 150.0);
 
         float adjustedPos[3];
         AddVectors(g_fLastExplosionPos, offset, adjustedPos);
