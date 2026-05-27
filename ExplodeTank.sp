@@ -88,7 +88,6 @@ void ExplodeTank_AddRockTrail(int rock, int rockIndex)
 {
     // 点燃石头产生火焰烟雾轨迹（和mutant_tanks的meteor一样）
     AcceptEntityInput(rock, "Ignite");
-    g_iRockTrailParticles[rockIndex] = INVALID_ENT_REFERENCE;
     PrintToServer("[爆炸TankDEBUG] 已点燃石头添加轨迹特效: rock=%d", rock);
 }
 
@@ -132,7 +131,6 @@ public void ExplodeTank_OnEntityCreated(int entity, const char[] classname)
         if (g_iRockCount < MAX_ROCKS)
         {
             g_iExplodeTankRocks[g_iRockCount] = EntIndexToEntRef(entity);
-            g_iRockTrailParticles[g_iRockCount] = INVALID_ENT_REFERENCE;
 
             // 添加榴弹炮轨迹特效
             ExplodeTank_AddRockTrail(entity, g_iRockCount);
