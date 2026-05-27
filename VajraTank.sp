@@ -23,17 +23,8 @@ void VajraTank_Apply(int tank)
     SetEntityRenderMode(tank, RENDER_NORMAL);
     SetEntityRenderColor(tank, 0, 0, 0, 255);
 
-    // 添加SDKHook反弹伤害（在Tank上hook）
+    // 添加SDKHook反弹伤害
     SDKHook(tank, SDKHook_OnTakeDamage, Hook_VajraOnTakeDamage);
-
-    // 为所有幸存者添加伤害修改hook
-    for (int i = 1; i <= MaxClients; i++)
-    {
-        if (IsClientInGame(i) && GetClientTeam(i) == 2)
-        {
-            SDKHook(i, SDKHook_OnTakeDamage, Hook_SurvivorOnTakeDamage);
-        }
-    }
 
     // 计算血量 (使用全局配置)
     int playerCount = GetOnlineSurvivorCount();
@@ -45,13 +36,13 @@ void VajraTank_Apply(int tank)
     SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
     SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
-    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x04金刚Tank \x01已出现!");
+    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x05金刚Tank \x01已出现!");
 
     // 添加防护罩
-    VajraTank_CreateShield(tank);
+    CreateVajraShield(tank);
 }
 
-void VajraTank_CreateShield(int tank)
+void CreateVajraShield(int tank)
 {
     int shield = CreateEntityByName("prop_dynamic_override");
     if (shield != -1)
@@ -113,6 +104,7 @@ public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, 
     // 反弹概率检查 (使用全局配置)
     ConVar reflectChance = FindConVar("shan_Vajra_reflect");
     int reflectValue = (reflectChance != null) ? reflectChance.IntValue : 10;
+
     if (GetRandomInt(1, 100) <= reflectValue)
     {
         // 计算反弹伤害 (配置值 ~ 配置值×2)
@@ -127,25 +119,6 @@ public Action Hook_VajraOnTakeDamage(int victim, int &attacker, int &inflictor, 
         PrintToChat(attacker, "\x03[寄寄之家 - SuperTank] \x01你的攻击被 \x04反弹 \x01你受到了 \x04%.0f \x01点伤害", randomDamage);
 
         return Plugin_Handled;
-    }
-
-    return Plugin_Continue;
-}
-
-// 幸存者受到伤害时的伤害修改（金刚Tank的攻击）
-public Action Hook_SurvivorOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
-{
-    // 检查攻击者是否是金刚Tank
-    int currentTank = EntRefToEntIndex(g_iVajraTankEntRef);
-    if (attacker != currentTank)
-        return Plugin_Continue;
-
-    // 应用固定伤害值 (使用全局配置)
-    ConVar damageValue = FindConVar("shan_tank_damage");
-    if (damageValue != null)
-    {
-        damage = damageValue.FloatValue;
-        return Plugin_Changed;
     }
 
     return Plugin_Continue;

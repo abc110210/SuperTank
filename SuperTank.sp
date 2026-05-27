@@ -183,6 +183,9 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     if (tank <= 0 || !IsClientInGame(tank))
         return;
 
+    // 清理之前的特殊Tank效果
+    ClearAllSpecialTankEffects(tank);
+
     // 随机选择Tank类型 (0-100)
     int random = GetRandomInt(1, 100);
 
@@ -204,6 +207,25 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
         ExplodeTank_Apply(tank);
     }
     // 剩余概率为普通Tank
+}
+
+// 清理所有特殊Tank效果
+void ClearAllSpecialTankEffects(int tank)
+{
+    // 清理金刚Tank防护罩
+    int shield = EntRefToEntIndex(g_iVajraShieldRef);
+    if (shield > 0 && IsValidEntity(shield))
+    {
+        AcceptEntityInput(shield, "Kill");
+        g_iVajraShieldRef = INVALID_ENT_REFERENCE;
+    }
+
+    // 重置Tank颜色
+    ResetTankColor(tank);
+
+    // 清理实体引用
+    g_iVajraTankEntRef = INVALID_ENT_REFERENCE;
+    g_iExplodeTankEntRef = INVALID_ENT_REFERENCE;
 }
 
 // ==================== 事件处理 ====================
