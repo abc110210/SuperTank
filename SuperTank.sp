@@ -35,6 +35,7 @@ bool g_bManualTankSpawn = false;
 // 共享函数前向声明（让各模块可以互相调用清理函数）
 void VajraTank_ClearAllEffects(int tank);
 void ExplodeTank_ClearAllEffects(int tank);
+void FireTank_ClearAllEffects(int tank);
 
 // 爆炸Tank模块前向声明
 void ExplodeTank_OnEntityCreated(int entity, const char[] classname);
@@ -43,9 +44,13 @@ int ExplodeTank_GetCurrentTank();
 void TriggerRockExplosion(float pos[3]);
 void ExplodeTank_RemoveRockTracking(int rockRef);
 
+// 燃烧Tank模块前向声明
+void FireTank_OnAttack(int victim, int attacker);
+
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
 #include "ExplodeTank.sp"
+#include "FireTank.sp"
 
 // ==================== 主要功能 ====================
 
@@ -62,6 +67,11 @@ public void OnPluginStart()
     CreateConVar("shan_ExplodeTank_explosion_damage", "50", "爆炸Tank爆炸伤害 (0-500)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 500.0);
     CreateConVar("shan_ExplodeTank_explosion_random", "100", "爆炸Tank爆炸概率 (1-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 100.0);
     CreateConVar("shan_ExplodeTank_explosion_range", "300", "爆炸Tank爆炸范围 (100-1000)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 100.0, true, 1000.0);
+
+    // 燃烧Tank配置
+    CreateConVar("shan_Firetank_odds", "10", "燃烧Tank生成概率 (0-100)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 100.0);
+    CreateConVar("shan_Firetank_damage", "3", "燃烧Tank灼烧伤害", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 100.0);
+    CreateConVar("shan_Firetank_fire_time", "10", "燃烧Tank灼烧持续时间", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 1.0, true, 60.0);
 
     // 全局Tank配置
     CreateConVar("shan_tank_hp", "4000", "Tank动态生命值 (每名玩家增加的血量)", FCVAR_NOTIFY|FCVAR_PRINTABLEONLY, true, 0.0, true, 10000.0);
@@ -210,6 +220,9 @@ public Action Command_TankConfig(int client, int args)
     ConVar cvarExplodeRandom = FindConVar("shan_ExplodeTank_explosion_random");
     ConVar cvarExplodeDamage = FindConVar("shan_ExplodeTank_explosion_damage");
     ConVar cvarExplodeRange = FindConVar("shan_ExplodeTank_explosion_range");
+    ConVar cvarFireOdds = FindConVar("shan_Firetank_odds");
+    ConVar cvarFireDamage = FindConVar("shan_Firetank_damage");
+    ConVar cvarFireTime = FindConVar("shan_Firetank_fire_time");
 
     // 计算当前难度基础血量
     int baseHP = GetDifficultyTankHP();
@@ -228,6 +241,8 @@ public Action Command_TankConfig(int client, int args)
     PrintToChat(client, "\x01爆炸Tank爆炸概率: \x04%d%%", (cvarExplodeRandom != null) ? cvarExplodeRandom.IntValue : 100);
     PrintToChat(client, "\x01爆炸Tank爆炸伤害: \x04%d", (cvarExplodeDamage != null) ? cvarExplodeDamage.IntValue : 50);
     PrintToChat(client, "\x01爆炸Tank爆炸范围: \x04%d", (cvarExplodeRange != null) ? cvarExplodeRange.IntValue : 300);
+    PrintToChat(client, "\x01燃烧Tank生成概率: \x04%d%%", (cvarFireOdds != null) ? cvarFireOdds.IntValue : 10);
+    PrintToChat(client, "\x01燃烧Tank灼烧伤害: \x04%d/秒 \x01(持续%d秒)", (cvarFireDamage != null) ? cvarFireDamage.IntValue : 3, (cvarFireTime != null) ? cvarFireTime.IntValue : 10);
     PrintToChat(client, "\x01====================================");
 
     return Plugin_Handled;
@@ -256,6 +271,7 @@ void ShowSuperTankMenu(int client)
     // 添加不同的Tank类型生成选项
     menu.AddItem("vajra", "生成金刚Tank");
     menu.AddItem("explode", "生成爆炸Tank");
+    menu.AddItem("fire", "生成燃烧Tank");
     menu.AddItem("normal", "生成普通Tank");
 
     menu.ExitButton = true;
@@ -276,6 +292,10 @@ public int Handler_SuperTankMenu(Menu menu, MenuAction action, int param1, int p
         else if (StrEqual(info, "explode"))
         {
             SpawnExplodeTank(param1);
+        }
+        else if (StrEqual(info, "fire"))
+        {
+            SpawnFireTank(param1);
         }
         else if (StrEqual(info, "normal"))
         {
@@ -351,6 +371,29 @@ void SpawnNormalTank(int client)
     L4D2_SpawnTank(pos, ang);
 }
 
+void SpawnFireTank(int client)
+{
+    if (!IsClientInGame(client) || !IsPlayerAlive(client))
+        return;
+
+    // 标记为手动生成，防止Event_TankSpawn重复处理
+    g_bManualTankSpawn = true;
+
+    float pos[3], ang[3];
+    GetClientAbsOrigin(client, pos);
+    GetClientAbsAngles(client, ang);
+
+    int tank = L4D2_SpawnTank(pos, ang);
+    if (tank > 0)
+    {
+        // 调用模块函数
+        FireTank_Apply(tank);
+    }
+
+    // 延迟重置标记
+    CreateTimer(1.0, Timer_ResetManualSpawn, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
 // ==================== Tank生成事件 ====================
 
 public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -374,11 +417,18 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     ConVar explodeOdds = FindConVar("shan_ExplodeTank_odds");
     int explodeOddsValue = (explodeOdds != null) ? explodeOdds.IntValue : 30;
 
+    // 燃烧Tank概率
+    ConVar fireOdds = FindConVar("shan_Firetank_odds");
+    int fireOddsValue = (fireOdds != null) ? fireOdds.IntValue : 10;
+
     // 根据概率选择Tank类型
     if (random <= vajraOddsValue)
         VajraTank_Apply(tank);
     else if (random <= vajraOddsValue + explodeOddsValue)
         ExplodeTank_Apply(tank);
+    else if (random <= vajraOddsValue + explodeOddsValue + fireOddsValue)
+        FireTank_Apply(tank);
+    // 剩余概率为普通Tank
 }
 
 public Action Timer_ResetManualSpawn(Handle timer)
@@ -416,6 +466,9 @@ public Action Hook_TankDamageOutput(int victim, int &attacker, int &inflictor, f
     if (zClass != 8)
         return Plugin_Continue;
 
+    // 检查是否是燃烧Tank攻击（触发灼烧效果）
+    FireTank_OnAttack(victim, attacker);
+
     // 应用全局Tank伤害值
     if (g_cvarTankDamage != null)
     {
@@ -445,6 +498,7 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     // 调用各模块的死亡处理
     VajraTank_OnDeath(client);
     ExplodeTank_OnDeath(client);
+    FireTank_OnDeath(client);
 }
 
 // 重置所有Tank效果（不重置颜色）
