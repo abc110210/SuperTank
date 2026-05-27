@@ -15,23 +15,8 @@ static int g_iRockCount = 0;
 
 // 前向声明
 void ExplodeTank_OnEntityCreated(int entity, const char[] classname);
-
-// 清理石头跟踪列表
-void ExplodeTank_ClearRockList()
-{
-    for (int i = 0; i < g_iRockCount; i++)
-    {
-        if (g_iExplodeTankRocks[i] != INVALID_ENT_REFERENCE)
-        {
-            int rock = EntRefToEntIndex(g_iExplodeTankRocks[i]);
-            if (rock > 0 && IsValidEntity(rock))
-            {
-                SDKUnhook(rock, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
-            }
-        }
-    }
-    g_iRockCount = 0;
-}
+void ExplodeTank_ClearRockList();
+public Action Hook_RockTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype);
 
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
@@ -72,6 +57,23 @@ bool ExplodeTank_IsTankRock(int inflictor)
 int ExplodeTank_GetCurrentTank()
 {
     return EntRefToEntIndex(g_iThisExplodeTankEntRef);
+}
+
+// 清理石头跟踪列表
+void ExplodeTank_ClearRockList()
+{
+    for (int i = 0; i < g_iRockCount; i++)
+    {
+        if (g_iExplodeTankRocks[i] != INVALID_ENT_REFERENCE)
+        {
+            int rock = EntRefToEntIndex(g_iExplodeTankRocks[i]);
+            if (rock > 0 && IsValidEntity(rock))
+            {
+                SDKUnhook(rock, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+            }
+        }
+    }
+    g_iRockCount = 0;
 }
 
 // 监听实体创建（用于跟踪爆炸Tank投掷的石头）
