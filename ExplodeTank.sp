@@ -68,6 +68,7 @@ void ExplodeTank_ClearRockList()
             {
                 PrintToServer("[爆炸TankDEBUG] 移除石头Hook: rock=%d", rock);
                 SDKUnhook(rock, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+                SDKUnhook(rock, SDKHook_OnBreak, Hook_RockBreak);
             }
         }
     }
@@ -101,6 +102,7 @@ void ExplodeTank_OnEntityCreated(int entity, const char[] classname)
 
             // Hook石头被破坏事件
             SDKHook(entity, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+            SDKHook(entity, SDKHook_OnBreak, Hook_RockBreak);
             PrintToServer("[爆炸TankDEBUG] 石头Hook已设置");
         }
         else
@@ -154,6 +156,7 @@ public Action Hook_RockTakeDamage(int victim, int &attacker, int &inflictor, flo
             {
                 g_iExplodeTankRocks[i] = INVALID_ENT_REFERENCE;
                 SDKUnhook(victim, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
+                SDKUnhook(victim, SDKHook_OnBreak, Hook_RockBreak);
                 break;
             }
         }
@@ -188,6 +191,47 @@ public Action Hook_RockTakeDamage(int victim, int &attacker, int &inflictor, flo
         // 触发爆炸
         TriggerRockExplosion(rockPos);
     }
+
+    return Plugin_Continue;
+}
+
+// 石头被销毁时（包括击中玩家/障碍物碎掉）
+public Action Hook_RockBreak(int entity)
+{
+    // 检查是否在跟踪列表中
+    int rockRef = EntIndexToEntRef(entity);
+    bool isExplodeTankRock = false;
+    int thrower = -1;
+
+    for (int i = 0; i < g_iRockCount; i++)
+    {
+        if (g_iExplodeTankRocks[i] == rockRef)
+        {
+            isExplodeTankRock = true;
+            // 获取投掷者
+            thrower = GetEntPropEnt(entity, Prop_Data, "m_hThrower");
+            // 从跟踪列表中移除
+            g_iExplodeTankRocks[i] = INVALID_ENT_REFERENCE;
+            break;
+        }
+    }
+
+    if (!isExplodeTankRock)
+        return Plugin_Continue;
+
+    // 检查是否是爆炸Tank的石头
+    int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+    if (thrower != currentTank)
+        return Plugin_Continue;
+
+    PrintToServer("[爆炸TankDEBUG] 石头销毁（击中玩家/障碍物），触发爆炸!");
+
+    // 获取石头位置
+    float rockPos[3];
+    GetEntPropVector(entity, Prop_Data, "m_vecOrigin", rockPos);
+
+    // 触发爆炸
+    TriggerRockExplosion(rockPos);
 
     return Plugin_Continue;
 }
@@ -261,108 +305,105 @@ void TriggerRockExplosion(float pos[3])
 
     PrintToChatAll("[爆炸Tank] 石头爆炸!");
 
-    // 创建第一次爆炸
-    ExplodeTank_CreateExplosion(pos, 1.3);
-
-    // 延迟创建第二次爆炸
-    DataPack pack = new DataPack();
-    pack.WriteFloat(pos[0]);
-    pack.WriteFloat(pos[1]);
-    pack.WriteFloat(pos[2]);
-    CreateTimer(0.2, Timer_ExplodeTankSecondExplosion, pack, TIMER_FLAG_NO_MAPCHANGE);
-}
-
-public Action Timer_ExplodeTankSecondExplosion(Handle timer, DataPack pack)
-{
-    pack.Reset();
-    float pos[3];
-    pos[0] = pack.ReadFloat();
-    pos[1] = pack.ReadFloat();
-    pos[2] = pack.ReadFloat();
-    delete pack;
-
-    ExplodeTank_CreateExplosion(pos, 1.6);
-    PrintToChatAll("[爆炸Tank] 石头第二次爆炸!");
-    return Plugin_Stop;
+    // 创建煤气罐式强力爆炸
+    ExplodeTank_CreateExplosion(pos);
 }
 
 // ==================== 爆炸效果 ====================
 
-void ExplodeTank_CreateExplosion(float pos[3], float scale)
+void ExplodeTank_CreateExplosion(float pos[3])
 {
-    PrintToServer("[爆炸TankDEBUG] 创建爆炸: scale=%.1f, pos=(%.1f,%.1f,%.1f)", scale, pos[0], pos[1], pos[2]);
+    PrintToServer("[爆炸TankDEBUG] 创建Pipe Bomb爆炸: pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
 
-    // 1. 创建env_explosion实体
+    // 获取配置的伤害值
+    ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
+    int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
+
+    // 1. 创建env_explosion实体（Pipe Bomb式爆炸）
     int explosion = CreateEntityByName("env_explosion");
     if (explosion != -1)
     {
         TeleportEntity(explosion, pos, NULL_VECTOR, NULL_VECTOR);
-        DispatchKeyValue(explosion, "iMagnitude", "150");
-        DispatchKeyValue(explosion, "iRadiusOverride", "400");
+
+        char damageStr[32];
+        IntToString(damage, damageStr, sizeof(damageStr));
+
+        char radiusStr[32];
+        IntToString(350, radiusStr, sizeof(radiusStr)); // Pipe Bomb爆炸范围
+
+        DispatchKeyValue(explosion, "iMagnitude", damageStr);
+        DispatchKeyValue(explosion, "iRadiusOverride", radiusStr);
         DispatchKeyValue(explosion, "fireballsprite", "sprites/zerogxplode.spr");
-        SetEntProp(explosion, Prop_Data, "m_spawnflags", 8);
+        SetEntProp(explosion, Prop_Data, "m_spawnflags", 8); // 环境爆炸
         DispatchSpawn(explosion);
         ActivateEntity(explosion);
         AcceptEntityInput(explosion, "Explode");
         AcceptEntityInput(explosion, "Kill");
-        PrintToServer("[爆炸TankDEBUG] env_explosion创建成功");
+        PrintToServer("[爆炸TankDEBUG] env_explosion创建成功: 伤害=%d, 范围=350", damage);
     }
 
-    // 2. 创建爆炸粒子效果
+    // 2. Pipe Bomb主爆炸粒子效果（火焰爆炸）
     int particle = CreateEntityByName("info_particle_system");
     if (particle != -1)
     {
         TeleportEntity(particle, pos, NULL_VECTOR, NULL_VECTOR);
-        DispatchKeyValue(particle, "effect_name", "gas_explosion");
+        DispatchKeyValue(particle, "effect_name", "weapon_pipebomb_explosion"); // Pipe Bomb主爆炸效果
         DispatchSpawn(particle);
         ActivateEntity(particle);
         AcceptEntityInput(particle, "Start");
-        CreateTimer(0.8, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
-        PrintToServer("[爆炸TankDEBUG] 粒子系统创建成功");
+        CreateTimer(2.0, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
+        PrintToServer("[爆炸TankDEBUG] Pipe Bomb爆炸粒子创建成功");
     }
 
-    // 3. 创建火焰粒子效果
-    int fireParticle = CreateEntityByName("info_particle_system");
-    if (fireParticle != -1)
+    // 3. 冲击火花效果
+    int sparkParticle = CreateEntityByName("info_particle_system");
+    if (sparkParticle != -1)
     {
-        TeleportEntity(fireParticle, pos, NULL_VECTOR, NULL_VECTOR);
-        DispatchKeyValue(fireParticle, "effect_name", "fire_large_01");
-        DispatchSpawn(fireParticle);
-        ActivateEntity(fireParticle);
-        AcceptEntityInput(fireParticle, "Start");
-        CreateTimer(1.0, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(fireParticle), TIMER_FLAG_NO_MAPCHANGE);
-        PrintToServer("[爆炸TankDEBUG] 火焰粒子创建成功");
+        TeleportEntity(sparkParticle, pos, NULL_VECTOR, NULL_VECTOR);
+        DispatchKeyValue(sparkParticle, "effect_name", "sparks_bounce"); // 冲击火花
+        DispatchSpawn(sparkParticle);
+        ActivateEntity(sparkParticle);
+        AcceptEntityInput(sparkParticle, "Start");
+        CreateTimer(1.0, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(sparkParticle), TIMER_FLAG_NO_MAPCHANGE);
+        PrintToServer("[爆炸TankDEBUG] 冲击火花粒子创建成功");
     }
 
-    // 4. 播放爆炸音效
-    char soundPath[] = "weapons/hegrenade/explode3.wav";
+    // 4. 烟雾效果
+    int smokeParticle = CreateEntityByName("info_particle_system");
+    if (smokeParticle != -1)
+    {
+        TeleportEntity(smokeParticle, pos, NULL_VECTOR, NULL_VECTOR);
+        DispatchKeyValue(smokeParticle, "effect_name", "explosion_smoke"); // 爆炸烟雾
+        DispatchSpawn(smokeParticle);
+        ActivateEntity(smokeParticle);
+        AcceptEntityInput(smokeParticle, "Start");
+        CreateTimer(4.0, Timer_ExplodeTankRemoveParticle, EntIndexToEntRef(smokeParticle), TIMER_FLAG_NO_MAPCHANGE);
+        PrintToServer("[爆炸TankDEBUG] 烟雾粒子创建成功");
+    }
+
+    // 5. Pipe Bomb爆炸音效
+    char soundPath[] = "weapons/pipe_bomb/explode3.wav";
     PrecacheSound(soundPath, true);
-    EmitAmbientSound(soundPath, pos, SNDLEVEL_NORMAL, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
+    EmitAmbientSound(soundPath, pos, SNDLEVEL_GUNFIRE, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
 
-    // 5. 造成爆炸伤害
-    ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
-    int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
-    float explosionRadius = 400.0 * scale;
-
-    int hitCount = 0;
-    for (int i = 1; i <= MaxClients; i++)
+    // 6. 强力震动效果
+    int shake = CreateEntityByName("env_shake");
+    if (shake != -1)
     {
-        if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
-        {
-            float playerPos[3];
-            GetClientAbsOrigin(i, playerPos);
-
-            float distance = GetVectorDistance(pos, playerPos, false);
-            if (distance < explosionRadius)
-            {
-                float actualDamage = damage * (1.0 - (distance / explosionRadius));
-                SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
-                hitCount++;
-            }
-        }
+        TeleportEntity(shake, pos, NULL_VECTOR, NULL_VECTOR);
+        DispatchKeyValue(shake, "amplitude", "25.0");
+        DispatchKeyValue(shake, "duration", "0.8");
+        DispatchKeyValue(shake, "frequency", "150.0");
+        DispatchKeyValue(shake, "radius", "600");
+        SetEntProp(shake, Prop_Data, "m_spawnflags", 4); // 全局震动
+        DispatchSpawn(shake);
+        ActivateEntity(shake);
+        AcceptEntityInput(shake, "StartShake");
+        AcceptEntityInput(shake, "Kill");
+        PrintToServer("[爆炸TankDEBUG] 震动效果创建成功");
     }
 
-    PrintToChatAll("[爆炸Tank] 石头爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
+    PrintToChatAll("[爆炸Tank] 石头爆炸! 伤害=%d", damage);
 }
 
 public Action Timer_ExplodeTankRemoveParticle(Handle timer, int particleRef)
