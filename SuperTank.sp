@@ -73,6 +73,26 @@ public void OnConfigsExecuted()
     PrintToServer("[寄寄之家 - SuperTank] 该插件已重载成功");
 }
 
+// ==================== 实体创建和销毁监听 ====================
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+    if (entity <= 0 || !IsValidEntity(entity))
+        return;
+
+    // 调用爆炸Tank的实体创建监听
+    ExplodeTank_OnEntityCreated(entity, classname);
+}
+
+public void OnEntityDestroyed(int entity)
+{
+    if (entity <= 0)
+        return;
+
+    // 调用爆炸Tank的实体销毁监听
+    ExplodeTank_OnEntityDestroyed(entity);
+}
+
 // ==================== 菜单系统 ====================
 
 public Action Command_SuperTank(int client, int args)
