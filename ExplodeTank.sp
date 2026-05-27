@@ -357,8 +357,8 @@ void ExplodeTank_CreateExplosion(float pos[3])
     float damageRadius = 500.0;      // 伤害范围
     float visualRadius = 1200.0;     // 视觉特效范围
 
-    // 第一次爆炸：大量爆炸道具确保火焰效果
-    for (int i = 0; i < 12; i++)
+    // 第一次爆炸：组合榴弹炮爆炸粒子
+    for (int i = 0; i < 8; i++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-400.0, 400.0);
@@ -368,22 +368,11 @@ void ExplodeTank_CreateExplosion(float pos[3])
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
 
-        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
-        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
-    }
-
-    // 尝试使用简单的爆炸粒子
-    for (int i = 0; i < 6; i++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-400.0, 400.0);
-        offset[1] = GetRandomFloat(-400.0, 400.0);
-        offset[2] = GetRandomFloat(0.0, 150.0);
-
-        float adjustedPos[3];
-        AddVectors(pos, offset, adjustedPos);
-
-        ShowParticle(adjustedPos, "explosion_huge");
+        // 组合榴弹炮爆炸效果
+        ShowParticle(adjustedPos, "gas_explosion_initialburst");
+        ShowParticle(adjustedPos, "gas_explosion_sparks_01");
+        ShowParticle(adjustedPos, "gas_explosion_smoke");
+        ShowParticle(adjustedPos, "gas_explosion_fireball");
     }
 
     PrintToServer("[爆炸TankDEBUG] 已创建第一次爆炸");
@@ -478,23 +467,8 @@ public Action Timer_SecondaryExplosion(Handle timer)
     if (!g_bHasLastExplosionPos)
         return Plugin_Stop;
 
-    // 创建大量爆炸道具（增强视觉效果）
+    // 创建大量爆炸粒子（复刻榴弹炮效果）
     for (int j = 0; j < 15; j++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-500.0, 500.0);
-        offset[1] = GetRandomFloat(-500.0, 500.0);
-        offset[2] = GetRandomFloat(0.0, 200.0);
-
-        float adjustedPos[3];
-        AddVectors(g_fLastExplosionPos, offset, adjustedPos);
-
-        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
-        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
-    }
-
-    // 创建简单爆炸粒子
-    for (int j = 0; j < 8; j++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-600.0, 600.0);
@@ -504,7 +478,11 @@ public Action Timer_SecondaryExplosion(Handle timer)
         float adjustedPos[3];
         AddVectors(g_fLastExplosionPos, offset, adjustedPos);
 
-        ShowParticle(adjustedPos, "explosion_huge");
+        // 组合榴弹炮爆炸效果
+        ShowParticle(adjustedPos, "gas_explosion_initialburst");
+        ShowParticle(adjustedPos, "gas_explosion_sparks_01");
+        ShowParticle(adjustedPos, "gas_explosion_smoke");
+        ShowParticle(adjustedPos, "gas_explosion_fireball");
     }
 
     // 播放二次爆炸音效（组合）
