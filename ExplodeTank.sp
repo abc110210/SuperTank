@@ -14,7 +14,7 @@ static int g_iExplodeTankRocks[MAX_ROCKS];
 static int g_iRockCount = 0;
 
 // 前向声明
-void ExplodeTank_SpawnBreakProp(float pos[3], const char[] model);
+void ExplodeTank_SpawnBreakProp(float pos[3], char[] model);
 
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
@@ -320,7 +320,7 @@ void ExplodeTank_CreateExplosion(float pos[3])
 }
 
 // 创建可破坏的道具（爆炸物）
-void ExplodeTank_SpawnBreakProp(float pos[3], const char[] model)
+void ExplodeTank_SpawnBreakProp(float pos[3], char[] model)
 {
     int prop = CreateEntityByName("prop_physics_override");
     if (prop != -1)
