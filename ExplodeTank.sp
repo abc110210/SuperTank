@@ -4,13 +4,16 @@
  * 多层监听系统 + 状态标记
  */
 
+// 定义最大实体数量
+#define MAX_ROCKS 128
+
 // 爆炸Tank独立的实体引用
 static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
 
 // 石头状态管理
-static int g_iExplodeRockEntRef[MAXENTITIES + 1];
-static bool g_bRockDestroyedByPlayer[MAXENTITIES + 1];
-static float g_vecRockPos[MAXENTITIES + 1][3];
+static int g_iExplodeRockEntRef[MAX_ROCKS];
+static bool g_bRockDestroyedByPlayer[MAX_ROCKS];
+static float g_vecRockPos[MAX_ROCKS][3];
 static int g_iRockCount = 0;
 
 // 爆炸Tank应用函数
