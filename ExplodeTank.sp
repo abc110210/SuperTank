@@ -67,7 +67,7 @@ void ExplodeTank_ClearRockList()
 {
     PrintToServer("[爆炸TankDEBUG] 清理石头跟踪列表，当前数量: %d", g_iRockCount);
 
-    for (int i = 0; i < g_iRockCount; i++)
+    for (int i = 0; i < MAX_ROCKS; i++)
     {
         if (g_iExplodeTankRocks[i] != INVALID_ENT_REFERENCE)
         {
@@ -78,6 +78,7 @@ void ExplodeTank_ClearRockList()
                 SDKUnhook(rock, SDKHook_OnTakeDamage, Hook_RockTakeDamage);
             }
         }
+        g_iExplodeTankRocks[i] = INVALID_ENT_REFERENCE;
     }
     g_iRockCount = 0;
     PrintToServer("[爆炸TankDEBUG] 石头跟踪列表已清理");
@@ -346,11 +347,22 @@ void ExplodeTank_CreateExplosion(float pos[3])
     float damageRadius = 250.0;      // 伤害范围
     float visualRadius = 500.0;      // 视觉特效范围
 
-    // 第一次爆炸：创建env_explosion（主要爆炸效果）
-    CreateEnvExplosion(pos);
+    // 第一次爆炸：使用榴弹炮粒子特效
+    for (int i = 0; i < 5; i++)
+    {
+        float offset[3];
+        offset[0] = GetRandomFloat(-100.0, 100.0);
+        offset[1] = GetRandomFloat(-100.0, 100.0);
+        offset[2] = GetRandomFloat(0.0, 50.0);
 
-    // 创建少量爆炸道具（减少烟雾火焰）
-    for (int i = 0; i < 3; i++)
+        float adjustedPos[3];
+        AddVectors(pos, offset, adjustedPos);
+
+        ShowParticle(adjustedPos, "weapon_grenade_explosion");
+    }
+
+    // 创建少量爆炸道具增强视觉冲击
+    for (int i = 0; i < 4; i++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-100.0, 100.0);
@@ -402,7 +414,7 @@ void ExplodeTank_CreateExplosion(float pos[3])
                 NormalizeVector(pushDir, pushDir);
 
                 float pushForce = 500.0 * (1.0 - (distance / damageRadius));
-                ScaleVector(pushDir, pushForce);
+                ScaleVector(pushDir, pushDir);
 
                 // 应用击退
                 PushPlayer(i, pushDir);
@@ -419,37 +431,31 @@ void ExplodeTank_CreateExplosion(float pos[3])
 }
 
 // 创建env_explosion爆炸效果
-void CreateEnvExplosion(float pos[3])
+// 显示粒子特效（榴弹炮爆炸效果）
+void ShowParticle(float pos[3], char[] particleName)
 {
-    int explosion = CreateEntityByName("env_explosion");
-    if (explosion != -1)
+    int particle = CreateEntityByName("info_particle_system");
+    if (particle != -1)
     {
-        // 设置爆炸属性（参考mutant_tanks的配置）
-        DispatchKeyValue(explosion, "fireballsprite", "sprites/zerogxplode.spr");
-        DispatchKeyValue(explosion, "iMagnitude", "50");
-        DispatchKeyValue(explosion, "iRadiusOverride", "300");
-        DispatchKeyValue(explosion, "rendermode", "5");
-        DispatchKeyValue(explosion, "spawnflags", "1");  // 无烟雾
+        TeleportEntity(particle, pos, NULL_VECTOR, NULL_VECTOR);
+        SetEntPropString(particle, Prop_Data, "m_iszEffectName", particleName);
+        DispatchSpawn(particle);
+        ActivateEntity(particle);
+        AcceptEntityInput(particle, "Start");
 
-        TeleportEntity(explosion, pos, NULL_VECTOR, NULL_VECTOR);
-        DispatchSpawn(explosion);
-        ActivateEntity(explosion);
+        // 3秒后删除粒子
+        CreateTimer(3.0, Timer_DeleteParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
 
-        AcceptEntityInput(explosion, "Explode");
-
-        // 延迟删除实体
-        CreateTimer(0.5, Timer_DeleteExplosion, EntIndexToEntRef(explosion), TIMER_FLAG_NO_MAPCHANGE);
-
-        PrintToServer("[爆炸TankDEBUG] 已创建env_explosion");
+        PrintToServer("[爆炸TankDEBUG] 已显示粒子特效: %s", particleName);
     }
 }
 
-public Action Timer_DeleteExplosion(Handle timer, int explosionRef)
+public Action Timer_DeleteParticle(Handle timer, int particleRef)
 {
-    int explosion = EntRefToEntIndex(explosionRef);
-    if (explosion > 0 && IsValidEntity(explosion))
+    int particle = EntRefToEntIndex(particleRef);
+    if (particle > 0 && IsValidEntity(particle))
     {
-        AcceptEntityInput(explosion, "Kill");
+        AcceptEntityInput(particle, "Kill");
     }
     return Plugin_Stop;
 }
@@ -468,7 +474,7 @@ public Action Timer_SecondaryExplosion(Handle timer)
                 float rockPos[3];
                 GetEntPropVector(rock, Prop_Data, "m_vecOrigin", rockPos);
 
-                // 在石头位置周围创建二次env_explosion
+                // 在石头位置周围创建二次粒子特效
                 for (int j = 0; j < 3; j++)
                 {
                     float offset[3];
@@ -479,7 +485,7 @@ public Action Timer_SecondaryExplosion(Handle timer)
                     float adjustedPos[3];
                     AddVectors(rockPos, offset, adjustedPos);
 
-                    CreateEnvExplosion(adjustedPos);
+                    ShowParticle(adjustedPos, "weapon_grenade_explosion");
                 }
 
                 // 播放二次爆炸音效（组合）
@@ -512,7 +518,7 @@ public Action Timer_TertiaryExplosion(Handle timer)
                 float rockPos[3];
                 GetEntPropVector(rock, Prop_Data, "m_vecOrigin", rockPos);
 
-                // 在更外围创建三次env_explosion
+                // 在更外围创建三次粒子特效
                 for (int j = 0; j < 2; j++)
                 {
                     float offset[3];
@@ -523,7 +529,7 @@ public Action Timer_TertiaryExplosion(Handle timer)
                     float adjustedPos[3];
                     AddVectors(rockPos, offset, adjustedPos);
 
-                    CreateEnvExplosion(adjustedPos);
+                    ShowParticle(adjustedPos, "weapon_grenade_explosion");
                 }
 
                 // 播放三次爆炸音效（组合）
