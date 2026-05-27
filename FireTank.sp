@@ -18,6 +18,9 @@ static int g_iBurnPlayerCount = 0;
 // 灼烧定时器
 static Handle g_hBurnTimer = null;
 
+// 燃烧Tank火焰维持定时器
+static Handle g_hFireTimer = null;
+
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
 // 清理所有灼烧玩家效果
@@ -35,6 +38,33 @@ void FireTank_ClearAllBurnEffects()
         KillTimer(g_hBurnTimer);
         g_hBurnTimer = null;
     }
+}
+
+// 清理火焰维持定时器
+void FireTank_ClearFireTimer()
+{
+    if (g_hFireTimer != null)
+    {
+        KillTimer(g_hFireTimer);
+        g_hFireTimer = null;
+    }
+}
+
+// 火焰维持定时器（每0.1秒检查并重新点燃燃烧Tank）
+public Action Timer_MaintainFire(Handle timer)
+{
+    int currentTank = EntRefToEntIndex(g_iThisFireTankEntRef);
+    if (currentTank <= 0 || !IsClientInGame(currentTank) || !IsPlayerAlive(currentTank))
+    {
+        g_hFireTimer = null;
+        return Plugin_Stop;
+    }
+
+    // 先熄灭再点燃（确保火焰持续）
+    AcceptEntityInput(currentTank, "Extinguish");
+    AcceptEntityInput(currentTank, "Ignite");
+
+    return Plugin_Continue;
 }
 
 // 添加灼烧效果到玩家
@@ -160,6 +190,9 @@ void FireTank_Apply(int tank)
     VajraTank_ClearAllEffects(tank);
     ExplodeTank_ClearAllEffects(tank);
 
+    // 清理旧的灼烧效果
+    FireTank_ClearAllBurnEffects();
+
     // 标记为燃烧Tank
     g_iThisFireTankEntRef = EntIndexToEntRef(tank);
 
@@ -169,6 +202,13 @@ void FireTank_Apply(int tank)
 
     // 全身着火特效
     AcceptEntityInput(tank, "Ignite");
+
+    // 启动火焰维持定时器（防止被水/雨浇灭）
+    if (g_hFireTimer != null)
+    {
+        KillTimer(g_hFireTimer);
+    }
+    g_hFireTimer = CreateTimer(0.1, Timer_MaintainFire, _, TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
 
     // 添加伤害Hook（用于免疫火焰和触发灼烧）
     SDKHook(tank, SDKHook_OnTakeDamage, Hook_FireOnTakeDamage);
@@ -240,6 +280,9 @@ public void FireTank_ClearAllEffects(int tank)
     {
         g_iThisFireTankEntRef = INVALID_ENT_REFERENCE;
     }
+
+    // 清理火焰维持定时器
+    FireTank_ClearFireTimer();
 }
 
 // 燃烧Tank死亡时清理
@@ -250,5 +293,6 @@ void FireTank_OnDeath(int tank)
     {
         g_iThisFireTankEntRef = INVALID_ENT_REFERENCE;
         FireTank_ClearAllBurnEffects();
+        FireTank_ClearFireTimer();
     }
 }
