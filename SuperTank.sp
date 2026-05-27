@@ -80,6 +80,12 @@ public void OnEntityCreated(int entity, const char[] classname)
     if (entity <= 0 || !IsValidEntity(entity))
         return;
 
+    // 调试：记录所有实体创建
+    if (StrEqual(classname, "tank_rock", false) || StrEqual(classname, "prop_physics", false))
+    {
+        PrintToServer("[爆炸TankDEBUG] 主文件: OnEntityCreated entity=%d classname=%s", entity, classname);
+    }
+
     // 调用爆炸Tank的实体创建监听
     ExplodeTank_OnEntityCreated(entity, classname);
 }
@@ -88,6 +94,15 @@ public void OnEntityDestroyed(int entity)
 {
     if (entity <= 0)
         return;
+
+    // 调试：记录所有实体销毁
+    char classname[64];
+    GetEntityClassname(entity, classname, sizeof(classname));
+
+    if (StrEqual(classname, "tank_rock", false) || StrEqual(classname, "prop_physics", false))
+    {
+        PrintToServer("[爆炸TankDEBUG] 主文件: OnEntityDestroyed entity=%d classname=%s", entity, classname);
+    }
 
     // 调用爆炸Tank的实体销毁监听
     ExplodeTank_OnEntityDestroyed(entity);

@@ -68,9 +68,13 @@ void ExplodeTank_OnEntityCreated(int entity, const char[] classname)
     if (currentTank <= 0 || !IsValidEntity(currentTank))
         return;
 
+    PrintToServer("[爆炸TankDEBUG] OnEntityCreated: entity=%d, classname=%s", entity, classname);
+
     // 检查是否是石头
     if (!StrEqual(classname, "tank_rock", false) && !StrEqual(classname, "prop_physics", false))
         return;
+
+    PrintToServer("[爆炸TankDEBUG] 检测到石头类实体，准备验证");
 
     // 延迟检查，确保实体完全创建
     CreateTimer(0.1, Timer_ValidateRock, EntIndexToEntRef(entity), TIMER_FLAG_NO_MAPCHANGE);
@@ -80,20 +84,31 @@ public Action Timer_ValidateRock(Handle timer, int rockRef)
 {
     int rock = EntRefToEntIndex(rockRef);
     if (rock <= 0 || !IsValidEntity(rock))
+    {
+        PrintToServer("[爆炸TankDEBUG] 石头验证失败：实体无效");
         return Plugin_Stop;
+    }
 
     // 检查是否是石头模型
     char modelName[128];
     GetEntPropString(rock, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
 
+    PrintToServer("[爆炸TankDEBUG] 石头模型名称: %s", modelName);
+
     if (StrContains(modelName, "rock", false) == -1)
+    {
+        PrintToServer("[爆炸TankDEBUG] 模型名称不包含'rock'，跳过");
         return Plugin_Stop;
+    }
 
     // 检查是否已经追踪
     for (int i = 0; i < g_iRockCount; i++)
     {
         if (EntRefToEntIndex(g_iExplodeRockEntRef[i]) == rock)
+        {
+            PrintToServer("[爆炸TankDEBUG] 石头已在追踪列表中");
             return Plugin_Stop;
+        }
     }
 
     // 添加到追踪列表
@@ -106,13 +121,17 @@ public Action Timer_ValidateRock(Handle timer, int rockRef)
         g_vecRockPos[g_iRockCount][2] = 0.0;
 
         // Hook石头事件
-        SDKHook(rock, SDKHook_TraceAttack, Hook_RockTraceAttack);
-        SDKHook(rock, SDKHook_StartTouch, Hook_RockStartTouch);
-        SDKHook(rock, SDKHook_Think, Hook_RockThink);
+        bool hook1 = SDKHook(rock, SDKHook_TraceAttack, Hook_RockTraceAttack);
+        bool hook2 = SDKHook(rock, SDKHook_StartTouch, Hook_RockStartTouch);
+        bool hook3 = SDKHook(rock, SDKHook_Think, Hook_RockThink);
 
         g_iRockCount++;
 
-        PrintToServer("[爆炸TankDEBUG] 石头已添加到追踪列表: entity=%d, total=%d", rock, g_iRockCount);
+        PrintToServer("[爆炸TankDEBUG] 石头已添加到追踪列表: entity=%d, total=%d, hooks=%d/%d/%d", rock, g_iRockCount, hook1, hook2, hook3);
+    }
+    else
+    {
+        PrintToServer("[爆炸TankDEBUG] 追踪列表已满，无法添加更多石头");
     }
 
     return Plugin_Stop;
@@ -214,11 +233,20 @@ public Action Hook_RockThink(int entity)
 // 第五层：实体销毁检测（在主文件OnEntityDestroyed中调用）
 void ExplodeTank_OnEntityDestroyed(int entity)
 {
+    // 检查是否是爆炸Tank存在
+    int currentTank = EntRefToEntIndex(g_iThisExplodeTankEntRef);
+    if (currentTank <= 0 || !IsValidEntity(currentTank))
+        return;
+
+    PrintToServer("[爆炸TankDEBUG] OnEntityDestroyed: entity=%d", entity);
+
     // 检查是否是我们追踪的石头
     int rockIndex = -1;
     for (int i = 0; i < g_iRockCount; i++)
     {
-        if (EntRefToEntIndex(g_iExplodeRockEntRef[i]) == entity)
+        int rock = EntRefToEntIndex(g_iExplodeRockEntRef[i]);
+        PrintToServer("[爆炸TankDEBUG] 检查石头 %d: ref=%d, rock=%d, 匹配=%d", i, g_iExplodeRockEntRef[i], rock, (rock == entity));
+        if (rock == entity)
         {
             rockIndex = i;
             break;
@@ -226,9 +254,12 @@ void ExplodeTank_OnEntityDestroyed(int entity)
     }
 
     if (rockIndex == -1)
+    {
+        PrintToServer("[爆炸TankDEBUG] 实体销毁但不在追踪列表中");
         return;
+    }
 
-    PrintToServer("[爆炸TankDEBUG] 石头销毁，触发爆炸: entity=%d", entity);
+    PrintToServer("[爆炸TankDEBUG] 石头销毁，触发爆炸: entity=%d, index=%d", entity, rockIndex);
 
     // 触发爆炸（使用缓存的位置）
     TriggerRockExplosion(rockIndex);
