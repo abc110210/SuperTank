@@ -13,11 +13,6 @@ static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
 static int g_iExplodeTankRocks[MAX_ROCKS];
 static int g_iRockCount = 0;
 
-// 前向声明
-void ExplodeTank_OnEntityCreated(int entity, const char[] classname);
-void ExplodeTank_ClearRockList();
-public Action Hook_RockTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype);
-
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
 // 检查是否是爆炸Tank投掷的石头
@@ -203,7 +198,7 @@ void ExplodeTank_Apply(int tank)
 
     PrintToServer("[爆炸TankDEBUG] 设置血量: %d (玩家数=%d, 每人血量=%d)", finalHP, playerCount, hpPerPlayer);
 
-    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x06爆炸Tank \x01已出现!");
+    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x04爆炸Tank \x01已出现!");
 }
 
 // ==================== 石头爆炸触发 ====================

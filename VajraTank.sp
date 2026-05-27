@@ -45,7 +45,7 @@ void VajraTank_Apply(int tank)
     SetEntProp(tank, Prop_Send, "m_iHealth", finalHP);
     SetEntProp(tank, Prop_Send, "m_iMaxHealth", finalHP);
 
-    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x06金刚Tank \x01已出现!");
+    PrintToChatAll("\x03[寄寄之家 - SuperTank] \x01强力感染者 \x04金刚Tank \x01已出现!");
 
     // 添加防护罩
     VajraTank_CreateShield(tank);

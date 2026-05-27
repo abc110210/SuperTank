@@ -36,6 +36,9 @@ bool g_bManualTankSpawn = false;
 void VajraTank_ClearAllEffects(int tank);
 void ExplodeTank_ClearAllEffects(int tank);
 
+// 爆炸Tank模块前向声明
+void ExplodeTank_OnEntityCreated(int entity, const char[] classname);
+
 // 包含各个Tank模块（必须在全局变量声明之后）
 #include "VajraTank.sp"
 #include "ExplodeTank.sp"
