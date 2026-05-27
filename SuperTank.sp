@@ -121,12 +121,11 @@ public void OnEntityDestroyed(int entity)
         bool isExplodeTankRock = false;
         int thrower = -1;
 
-        for (int i = 0; i < 128; i++)  // MAX_ROCKS
+        for (int i = 0; i < 128; i++)
         {
             if (ExplodeTank_IsTrackedRock(i, rockRef))
             {
                 isExplodeTankRock = true;
-                // 获取投掷者
                 thrower = GetEntPropEnt(entity, Prop_Data, "m_hThrower");
                 break;
             }
@@ -138,8 +137,6 @@ public void OnEntityDestroyed(int entity)
             int currentTank = ExplodeTank_GetCurrentTank();
             if (thrower == currentTank)
             {
-                PrintToServer("[爆炸TankDEBUG] 石头销毁（击中玩家/障碍物），触发爆炸!");
-
                 // 清理石头跟踪
                 ExplodeTank_RemoveRockTracking(rockRef);
 
@@ -164,32 +161,19 @@ public void OnConfigsExecuted()
 public void OnClientPutInServer(int client)
 {
     // Hook所有玩家的伤害事件（用于检测Tank伤害）
-    // 注意：在OnClientPutInServer时，客户端可能还未完全进入游戏，所以直接Hook
     SDKHook(client, SDKHook_OnTakeDamage, Hook_TankDamageOutput);
-    PrintToServer("[HookDEBUG] 已Hook客户端 %d 的伤害事件", client);
 }
 
 // 石头爆炸检测（在OnTakeDamage中调用）
 void CheckExplodeTankRock(int victim, int inflictor, float damage)
 {
-    PrintToServer("[爆炸TankDEBUG] ========== 石头检测开始 ==========");
-    PrintToServer("[爆炸TankDEBUG] victim=%d, inflictor=%d, damage=%.1f", victim, inflictor, damage);
-
     // 检查inflictor是否有效
     if (inflictor <= 0)
-    {
-        PrintToServer("[爆炸TankDEBUG] inflictor无效，跳过检测");
         return;
-    }
 
     // 检查是否是爆炸Tank的石头
     if (!ExplodeTank_IsTankRock(inflictor))
-    {
-        PrintToServer("[爆炸TankDEBUG] 不是爆炸Tank的石头");
         return;
-    }
-
-    PrintToServer("[爆炸TankDEBUG] 确认是爆炸Tank的石头!");
 
     // 检查是否打中幸存者
     if (victim > 0 && victim <= MaxClients && IsClientInGame(victim) && IsPlayerAlive(victim) && GetClientTeam(victim) == 2)
@@ -198,14 +182,8 @@ void CheckExplodeTankRock(int victim, int inflictor, float damage)
         float rockPos[3];
         GetEntPropVector(inflictor, Prop_Data, "m_vecOrigin", rockPos);
 
-        PrintToServer("[爆炸TankDEBUG] 石头击中幸存者，触发爆炸: pos=(%.1f,%.1f,%.1f)", rockPos[0], rockPos[1], rockPos[2]);
-
         // 触发爆炸
         TriggerRockExplosion(rockPos);
-    }
-    else
-    {
-        PrintToServer("[爆炸TankDEBUG] 受害者不是幸存者");
     }
 }
 
@@ -379,16 +357,11 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 {
     // 如果是手动生成的Tank，跳过自动处理
     if (g_bManualTankSpawn)
-    {
-        PrintToServer("[TankSpawnDEBUG] 跳过手动生成的Tank");
         return;
-    }
 
     int tank = GetClientOfUserId(event.GetInt("userid"));
     if (tank <= 0 || !IsClientInGame(tank))
         return;
-
-    PrintToServer("[TankSpawnDEBUG] Tank生成: tank=%d, userid=%d, name=%N", tank, event.GetInt("userid"), tank);
 
     // 随机选择Tank类型 (0-100)
     int random = GetRandomInt(1, 100);
@@ -401,24 +374,11 @@ public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
     ConVar explodeOdds = FindConVar("shan_ExplodeTank_odds");
     int explodeOddsValue = (explodeOdds != null) ? explodeOdds.IntValue : 30;
 
-    PrintToServer("[TankSpawnDEBUG] 随机数=%d, 金刚概率=%d, 爆炸概率=%d", random, vajraOddsValue, explodeOddsValue);
-
     // 根据概率选择Tank类型
     if (random <= vajraOddsValue)
-    {
-        PrintToServer("[TankSpawnDEBUG] 选择金刚Tank");
         VajraTank_Apply(tank);
-    }
     else if (random <= vajraOddsValue + explodeOddsValue)
-    {
-        PrintToServer("[TankSpawnDEBUG] 选择爆炸Tank");
         ExplodeTank_Apply(tank);
-    }
-    else
-    {
-        PrintToServer("[TankSpawnDEBUG] 选择普通Tank");
-    }
-    // 剩余概率为普通Tank
 }
 
 public Action Timer_ResetManualSpawn(Handle timer)
@@ -439,24 +399,12 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
     if (GetClientTeam(client) == 2)
     {
         SDKHook(client, SDKHook_OnTakeDamage, Hook_TankDamageOutput);
-        PrintToServer("[HookDEBUG] 幸存者 %N 生成，已Hook伤害事件", client);
     }
 }
 
 // Tank输出伤害统一处理
 public Action Hook_TankDamageOutput(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-    // 调试：输出所有伤害事件
-    if (inflictor > 0 && IsValidEntity(inflictor))
-    {
-        char classname[64];
-        GetEntityClassname(inflictor, classname, sizeof(classname));
-        if (StrEqual(classname, "tank_rock", false))
-        {
-            PrintToServer("[伤害HookDEBUG] 石头伤害: victim=%d, attacker=%d, inflictor=%d, damage=%.1f", victim, attacker, inflictor, damage);
-        }
-    }
-
     // 优先检查是否是爆炸Tank的石头伤害（石头伤害的attacker可能不是Tank）
     CheckExplodeTankRock(victim, inflictor, damage);
 
