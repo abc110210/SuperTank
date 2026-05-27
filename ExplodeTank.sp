@@ -13,9 +13,6 @@ static int g_iThisExplodeTankEntRef = INVALID_ENT_REFERENCE;
 static int g_iExplodeTankRocks[MAX_ROCKS];
 static int g_iRockCount = 0;
 
-// 前向声明
-void ExplodeTank_SpawnBreakProp(float pos[3], char[] model);
-
 // ==================== 辅助函数（供SuperTank.sp调用）====================
 
 // 检查是否是爆炸Tank投掷的石头
@@ -278,47 +275,6 @@ void TriggerRockExplosion(float pos[3])
 
 // ==================== 爆炸效果 ====================
 
-void ExplodeTank_CreateExplosion(float pos[3])
-{
-    PrintToServer("[爆炸TankDEBUG] 创建陨石爆炸: pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
-
-    // 获取配置的伤害值
-    ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
-    int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
-
-    // 使用陨石特效：创建可破坏的汽油罐和丙烷罐
-    ExplodeTank_SpawnBreakProp(pos, "models/props_junk/gascan001a.mdl");      // 汽油罐
-    ExplodeTank_SpawnBreakProp(pos, "models/props_junk/propanecanister001a.mdl"); // 丙烷罐
-
-    // 播放陨石爆炸音效
-    char soundPath[] = "weapons/pipe_bomb/explode3.wav";
-    PrecacheSound(soundPath, true);
-    EmitAmbientSound(soundPath, pos, SNDLEVEL_GUNFIRE, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
-
-    // 对范围内幸存者造成伤害
-    float explosionRadius = 250.0;
-    int hitCount = 0;
-
-    for (int i = 1; i <= MaxClients; i++)
-    {
-        if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
-        {
-            float playerPos[3];
-            GetClientAbsOrigin(i, playerPos);
-
-            float distance = GetVectorDistance(pos, playerPos, false);
-            if (distance < explosionRadius)
-            {
-                float actualDamage = damage * (1.0 - (distance / explosionRadius));
-                SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
-                hitCount++;
-            }
-        }
-    }
-
-    PrintToChatAll("[爆炸Tank] 陨石爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
-}
-
 // 创建可破坏的道具（爆炸物）
 void ExplodeTank_SpawnBreakProp(float pos[3], char[] model)
 {
@@ -362,6 +318,47 @@ public Action Timer_ExplodeTankIgniteProp(Handle timer, DataPack pack)
     }
 
     return Plugin_Stop;
+}
+
+void ExplodeTank_CreateExplosion(float pos[3])
+{
+    PrintToServer("[爆炸TankDEBUG] 创建陨石爆炸: pos=(%.1f,%.1f,%.1f)", pos[0], pos[1], pos[2]);
+
+    // 获取配置的伤害值
+    ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
+    int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
+
+    // 使用陨石特效：创建可破坏的汽油罐和丙烷罐
+    ExplodeTank_SpawnBreakProp(pos, "models/props_junk/gascan001a.mdl");      // 汽油罐
+    ExplodeTank_SpawnBreakProp(pos, "models/props_junk/propanecanister001a.mdl"); // 丙烷罐
+
+    // 播放陨石爆炸音效
+    char soundPath[] = "weapons/pipe_bomb/explode3.wav";
+    PrecacheSound(soundPath, true);
+    EmitAmbientSound(soundPath, pos, SNDLEVEL_GUNFIRE, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
+
+    // 对范围内幸存者造成伤害
+    float explosionRadius = 250.0;
+    int hitCount = 0;
+
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+        {
+            float playerPos[3];
+            GetClientAbsOrigin(i, playerPos);
+
+            float distance = GetVectorDistance(pos, playerPos, false);
+            if (distance < explosionRadius)
+            {
+                float actualDamage = damage * (1.0 - (distance / explosionRadius));
+                SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
+                hitCount++;
+            }
+        }
+    }
+
+    PrintToChatAll("[爆炸Tank] 陨石爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
 }
 
 public Action Timer_ExplodeTankRemoveParticle(Handle timer, int particleRef)
