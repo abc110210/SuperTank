@@ -343,15 +343,44 @@ void ExplodeTank_CreateExplosion(float pos[3])
     ConVar explosionDamage = FindConVar("shan_ExplodeTank_explosion_damage");
     int damage = (explosionDamage != null) ? explosionDamage.IntValue : 50;
 
-    // 播放爆炸音效
-    char soundPath[] = "weapons/pipe_bomb/explode3.wav";
-    PrecacheSound(soundPath, true);
-    EmitAmbientSound(soundPath, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, 0.0);
-
-    // 对范围内幸存者造成伤害
     float explosionRadius = 250.0;
-    int hitCount = 0;
 
+    // 创建env_explosion实体（榴弹发射器爆炸效果）
+    int explosion = CreateEntityByName("env_explosion");
+    if (explosion != -1)
+    {
+        // 设置爆炸属性
+        SetEntProp(explosion, Prop_Data, "m_iMagnitude", damage);      // 爆炸伤害
+        SetEntProp(explosion, Prop_Data, "m_iRadiusOverride", RoundToFloor(explosionRadius));  // 爆炸半径
+
+        // 设置爆炸位置
+        TeleportEntity(explosion, pos, NULL_VECTOR, NULL_VECTOR);
+
+        // 设置为榴弹发射器爆炸类型
+        SetEntProp(explosion, Prop_Data, "m_spawnflags", 62);  // 62 = smoke + sparks + debris
+
+        DispatchSpawn(explosion);
+        ActivateEntity(explosion);
+
+        // 触发爆炸
+        AcceptEntityInput(explosion, "Explode");
+
+        // 延迟删除实体
+        AcceptEntityInput(explosion, "Kill");
+
+        PrintToServer("[爆炸TankDEBUG] 已创建env_explosion: damage=%d, radius=%f", damage, explosionRadius);
+    }
+
+    // 播放榴弹发射器爆炸音效
+    char soundPath[] = "weapons/grenade_launcher/grenadefire/grenade_explode1.wav";
+    PrecacheSound(soundPath, true);
+    EmitAmbientSound(soundPath, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
+
+    // 屏幕震动
+    ShakeScreen(pos, explosionRadius);
+
+    // 击退幸存者并造成伤害
+    int hitCount = 0;
     for (int i = 1; i <= MaxClients; i++)
     {
         if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
@@ -362,6 +391,18 @@ void ExplodeTank_CreateExplosion(float pos[3])
             float distance = GetVectorDistance(pos, playerPos, false);
             if (distance < explosionRadius)
             {
+                // 计算击退方向和力度
+                float pushDir[3];
+                MakeVectorFromPoints(pos, playerPos, pushDir);
+                NormalizeVector(pushDir, pushDir);
+
+                float pushForce = 500.0 * (1.0 - (distance / explosionRadius));
+                ScaleVector(pushDir, pushForce);
+
+                // 应用击退
+                PushPlayer(i, pushDir);
+
+                // 造成伤害
                 float actualDamage = damage * (1.0 - (distance / explosionRadius));
                 SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
                 hitCount++;
@@ -370,6 +411,41 @@ void ExplodeTank_CreateExplosion(float pos[3])
     }
 
     PrintToChatAll("[爆炸Tank] 石头爆炸! 伤害=%d, 命中=%d人", damage, hitCount);
+}
+
+// 屏幕震动
+void ShakeScreen(float pos[3], float radius)
+{
+    int shake = CreateEntityByName("env_shake");
+    if (shake != -1)
+    {
+        SetEntPropFloat(shake, Prop_Data, "m_amplitude", 16.0);      // 震动幅度
+        SetEntPropFloat(shake, Prop_Data, "m_frequency", 150.0);     // 震动频率
+        SetEntPropFloat(shake, Prop_Data, "m_duration", 1.0);        // 震动持续时间
+        SetEntProp(shake, Prop_Data, "m_radius", radius);            // 震动半径
+
+        TeleportEntity(shake, pos, NULL_VECTOR, NULL_VECTOR);
+
+        DispatchSpawn(shake);
+        ActivateEntity(shake);
+
+        AcceptEntityInput(shake, "StartShake");
+        AcceptEntityInput(shake, "Kill");
+
+        PrintToServer("[爆炸TankDEBUG] 已创建屏幕震动");
+    }
+}
+
+// 击退玩家
+void PushPlayer(int client, float pushDir[3])
+{
+    float currentVel[3];
+    GetEntPropVector(client, Prop_Data, "m_vecVelocity", currentVel);
+
+    // 添加击退速度到当前速度
+    AddVectors(currentVel, pushDir, currentVel);
+
+    TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, currentVel);
 }
 
 public Action Timer_ExplodeTankRemoveParticle(Handle timer, int particleRef)
