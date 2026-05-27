@@ -97,7 +97,10 @@ void FireTank_AddBurnEffect(int client)
         // 点燃玩家产生视觉特效
         if (IsClientInGame(client) && IsPlayerAlive(client))
         {
-            AcceptEntityInput(client, "Ignite");
+            // 先熄灭（防止重复叠加）
+            AcceptEntityInput(client, "Extinguish");
+            // 延迟一小段时间再点燃，确保视觉效果生效
+            CreateTimer(0.1, Timer_IgnitePlayer, userid, TIMER_FLAG_NO_MAPCHANGE);
         }
 
         // 启动灼烧定时器（如果还未启动）
@@ -106,6 +109,16 @@ void FireTank_AddBurnEffect(int client)
             g_hBurnTimer = CreateTimer(1.0, Timer_BurnDamage, _, TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
         }
     }
+}
+
+public Action Timer_IgnitePlayer(Handle timer, int userid)
+{
+    int client = GetClientOfUserId(userid);
+    if (client > 0 && IsClientInGame(client) && IsPlayerAlive(client))
+    {
+        AcceptEntityInput(client, "Ignite");
+    }
+    return Plugin_Stop;
 }
 
 // 灼烧伤害定时器
@@ -367,104 +380,57 @@ public Action Timer_DeleteFireParticle(Handle timer, int particleRef)
 // 创建燃烧Tank死亡爆炸（大面积火焰）
 void FireTank_CreateDeathExplosion(float pos[3])
 {
-    // 播放爆炸音效
-    char soundPath[] = "ambient/explosions/explode_2.wav";
-    PrecacheSound(soundPath, true);
-    EmitAmbientSound(soundPath, pos, SOUND_FROM_WORLD, SNDLEVEL_GUNFIRE);
-
-    // 创建大量火焰粒子效果（覆盖大面积）
-    for (int i = 0; i < 12; i++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-250.0, 250.0);
-        offset[1] = GetRandomFloat(-250.0, 250.0);
-        offset[2] = GetRandomFloat(0.0, 100.0);
-
-        float adjustedPos[3];
-        AddVectors(pos, offset, adjustedPos);
-
-        FireTank_ShowParticle(adjustedPos, "gas_explosion_fireball");
-    }
-
-    // 添加大量烟雾效果
+    // 在地面上创建多个持续燃烧的火焰（像汽油罐爆炸后留下的火焰）
     for (int i = 0; i < 8; i++)
     {
         float offset[3];
         offset[0] = GetRandomFloat(-200.0, 200.0);
         offset[1] = GetRandomFloat(-200.0, 200.0);
-        offset[2] = GetRandomFloat(0.0, 80.0);
-
-        float adjustedPos[3];
-        AddVectors(pos, offset, adjustedPos);
-
-        FireTank_ShowParticle(adjustedPos, "gas_explosion_smoke");
-    }
-
-    // 添加红色火花
-    for (int i = 0; i < 6; i++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-180.0, 180.0);
-        offset[1] = GetRandomFloat(-180.0, 180.0);
-        offset[2] = GetRandomFloat(-20.0, 60.0);
-
-        float adjustedPos[3];
-        AddVectors(pos, offset, adjustedPos);
-
-        FireTank_ShowParticle(adjustedPos, "gas_explosion_sparks_01");
-    }
-
-    // 创建多个汽油罐爆炸（产生地面大面积火焰）
-    for (int i = 0; i < 5; i++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-150.0, 150.0);
-        offset[1] = GetRandomFloat(-150.0, 150.0);
         offset[2] = 0.0;
 
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
+
+        // 调整高度到地面
+        adjustedPos[2] = pos[2];
+
+        // 创建环境火焰实体
+        int fire = CreateEntityByName("env_fire");
+        if (fire != -1)
+        {
+            // 设置火焰属性
+            SetEntPropFloat(fire, Prop_Data, "m_flFireScale", GetRandomFloat(1.5, 2.5));  // 火焰大小
+            SetEntProp(fire, Prop_Data, "m_iFireMagnitude", 100);  // 火焰强度
+            SetEntProp(fire, Prop_Data, "m_iFireAttack", 10);  // 火焰伤害
+            SetEntPropFloat(fire, Prop_Data, "m_flLifetime", GetRandomFloat(8.0, 15.0));  // 持续时间（秒）
+            SetEntProp(fire, Prop_Data, "m_bEnabled", 1);  // 启用
+
+            TeleportEntity(fire, adjustedPos, NULL_VECTOR, NULL_VECTOR);
+            DispatchSpawn(fire);
+            ActivateEntity(fire);
+
+            AcceptEntityInput(fire, "StartFire");
+
+            // 火焰会在设定时间后自动熄灭
+        }
+    }
+
+    // 创建汽油罐爆炸来产生初始的地面火焰
+    for (int i = 0; i < 3; i++)
+    {
+        float offset[3];
+        offset[0] = GetRandomFloat(-100.0, 100.0);
+        offset[1] = GetRandomFloat(-100.0, 100.0);
+        offset[2] = 0.0;
+
+        float adjustedPos[3];
+        AddVectors(pos, offset, adjustedPos);
+        adjustedPos[2] = pos[2];
 
         FireTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
     }
 
-    // 创建多个丙烷罐爆炸（额外火焰效果）
-    for (int i = 0; i < 3; i++)
-    {
-        float offset[3];
-        offset[0] = GetRandomFloat(-120.0, 120.0);
-        offset[1] = GetRandomFloat(-120.0, 120.0);
-        offset[2] = 0.0;
-
-        float adjustedPos[3];
-        AddVectors(pos, offset, adjustedPos);
-
-        FireTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
-    }
-
-    // 屏幕震动
-    int shake = CreateEntityByName("env_shake");
-    if (shake != -1)
-    {
-        SetEntPropFloat(shake, Prop_Data, "m_amplitude", 20.0);
-        SetEntPropFloat(shake, Prop_Data, "m_frequency", 150.0);
-        SetEntPropFloat(shake, Prop_Data, "m_duration", 1.0);
-        SetEntProp(shake, Prop_Data, "m_radius", 400.0);
-
-        TeleportEntity(shake, pos, NULL_VECTOR, NULL_VECTOR);
-        DispatchSpawn(shake);
-        ActivateEntity(shake);
-        AcceptEntityInput(shake, "StartShake");
-        AcceptEntityInput(shake, "Kill");
-    }
-
-    // 对周围幸存者造成伤害
-    ConVar fireDamage = FindConVar("shan_Firetank_damage");
-    int burnDamage = (fireDamage != null) ? fireDamage.IntValue : 3;
-
-    ConVar fireTime = FindConVar("shan_Firetank_fire_time");
-    int burnTime = (fireTime != null) ? fireTime.IntValue : 10;
-
+    // 对周围幸存者造成灼烧效果
     for (int i = 1; i <= MaxClients; i++)
     {
         if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
@@ -473,25 +439,8 @@ void FireTank_CreateDeathExplosion(float pos[3])
             GetClientAbsOrigin(i, playerPos);
 
             float distance = GetVectorDistance(pos, playerPos, false);
-            if (distance < 300.0)
+            if (distance < 250.0)
             {
-                // 造成爆炸伤害
-                float actualDamage = burnDamage * burnTime * 0.5;
-                SDKHooks_TakeDamage(i, 0, 0, actualDamage, DMG_BLAST);
-
-                // 击退效果
-                float pushDir[3];
-                MakeVectorFromPoints(pos, playerPos, pushDir);
-                NormalizeVector(pushDir, pushDir);
-
-                float pushForce = 400.0 * (1.0 - (distance / 300.0));
-                ScaleVector(pushDir, pushForce);
-
-                float currentVel[3];
-                GetEntPropVector(i, Prop_Data, "m_vecVelocity", currentVel);
-                AddVectors(currentVel, pushDir, currentVel);
-                TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, currentVel);
-
                 // 添加灼烧效果
                 FireTank_AddBurnEffect(i);
             }
