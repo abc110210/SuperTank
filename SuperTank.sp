@@ -92,8 +92,13 @@ public void OnMapStart()
     // 预缓存爆炸精灵文件
     PrecacheGeneric("sprites/zerogxplode.spr", true);
 
-    // 预缓存榴弹炮粒子特效文件（environmental_fx.pcf）
+    // 预缓存榴弹炮粒子特效文件
     PrecacheGeneric("particles/environmental_fx.pcf", true);
+    PrecacheGeneric("particles/editor/environmental_fx.pcf", true);
+
+    // 预缓存其他可能的爆炸粒子文件
+    PrecacheGeneric("particles/explosion.pcf", true);
+    PrecacheGeneric("particles/editor/explosion.pcf", true);
 }
 
 // 监听实体创建（用于石头跟踪）

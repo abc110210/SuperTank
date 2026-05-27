@@ -368,11 +368,29 @@ void ExplodeTank_CreateExplosion(float pos[3])
         float adjustedPos[3];
         AddVectors(pos, offset, adjustedPos);
 
+        // 测试：先使用简单的粒子名称
+        ShowParticle(adjustedPos, "explosion_huge");
+
         // 组合榴弹炮爆炸效果
         ShowParticle(adjustedPos, "gas_explosion_initialburst");
         ShowParticle(adjustedPos, "gas_explosion_sparks_01");
         ShowParticle(adjustedPos, "gas_explosion_smoke");
         ShowParticle(adjustedPos, "gas_explosion_fireball");
+    }
+
+    // 添加一些物理爆炸道具作为备用
+    for (int i = 0; i < 4; i++)
+    {
+        float offset[3];
+        offset[0] = GetRandomFloat(-300.0, 300.0);
+        offset[1] = GetRandomFloat(-300.0, 300.0);
+        offset[2] = GetRandomFloat(0.0, 100.0);
+
+        float adjustedPos[3];
+        AddVectors(pos, offset, adjustedPos);
+
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/gascan001a.mdl");
+        ExplodeTank_SpawnBreakProp(adjustedPos, "models/props_junk/propanecanister001a.mdl");
     }
 
     PrintToServer("[爆炸TankDEBUG] 已创建第一次爆炸");
@@ -433,7 +451,11 @@ void ShowParticle(float pos[3], char[] particleName)
     int particle = CreateEntityByName("info_particle_system");
     if (particle != -1)
     {
+        // 先设置位置
         TeleportEntity(particle, pos, NULL_VECTOR, NULL_VECTOR);
+
+        // 使用DispatchKeyValue设置粒子名称
+        DispatchKeyValue(particle, "effect_name", particleName);
         SetEntPropString(particle, Prop_Data, "m_iszEffectName", particleName);
 
         // 设置粒子系统属性
@@ -442,12 +464,18 @@ void ShowParticle(float pos[3], char[] particleName)
 
         DispatchSpawn(particle);
         ActivateEntity(particle);
+
+        // 启动粒子
         AcceptEntityInput(particle, "Start");
 
-        // 3秒后删除粒子
-        CreateTimer(3.0, Timer_DeleteParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
+        // 5秒后删除粒子
+        CreateTimer(5.0, Timer_DeleteParticle, EntIndexToEntRef(particle), TIMER_FLAG_NO_MAPCHANGE);
 
-        PrintToServer("[爆炸TankDEBUG] 已显示粒子特效: %s", particleName);
+        PrintToServer("[爆炸TankDEBUG] 已显示粒子特效: %s, entity=%d", particleName, particle);
+    }
+    else
+    {
+        PrintToServer("[爆炸TankDEBUG] 创建粒子失败: %s", particleName);
     }
 }
 
